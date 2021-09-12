@@ -1,4 +1,13 @@
 #include "systemcalls.h"
+
+#include <stdlib.h>
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#include <fcntl.h>
+
 #include <syslog.h>
 /**
  * @param cmd the command to execute with system()
@@ -26,14 +35,14 @@ bool do_system(const char *cmd)
     
     if(!WIFEXITED(status))	// returns false if the child is not terminated normally
     {
-    	syslog(LOG_ERROR, "WIFEXITED: Child is not terminated normally\n");
+    	syslog(LOG_ERR, "WIFEXITED: Child is not terminated normally\n");
     	return false;
     }
     
     // WEXITSTATUS should be employed only if WIFEXITED returned true.
     if(WEXITSTATUS(status) != 0)	// return false if child is not ending normally
     {
-    	syslog(LOG_ERROR, "EXITSTATUS: Child is not ending normally\n");
+    	syslog(LOG_ERR, "EXITSTATUS: Child is not ending normally\n");
     	return false;
     }
 
@@ -109,7 +118,7 @@ bool do_exec(int count, ...)
     {
     	if(WEXITSTATUS(status) != 0)	// return false if child is not ending normally
     	{
-    	    syslog(LOG_ERROR, "EXITSTATUS: Child is not ending normally\n");
+    	    syslog(LOG_ERR, "EXITSTATUS: Child is not ending normally\n");
     	    return false;
     	}
     }
@@ -149,7 +158,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 */
 
     int 	status;
-    int 	fd
+    int 	fd;
     pid_t 	pid;
     
     
@@ -159,7 +168,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     {
     	perror("failed to open file\n");
     	
-    	return false
+    	return false;
     }
     
     pid = fork();
@@ -180,7 +189,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     	
     	close(fd);
     	
-    	execvp(cmd, args); 
+    	execvp(command[0], command); 
     	perror("execvp failed\n");
     	
     	return false;
@@ -195,7 +204,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     {
     	if(WEXITSTATUS(status) != 0)	// return false if child is not ending normally
     	{
-    	    syslog(LOG_ERROR, "EXITSTATUS: Child is not ending normally\n");
+    	    syslog(LOG_ERR, "EXITSTATUS: Child is not ending normally\n");
     	    return false;
     	}
     }
