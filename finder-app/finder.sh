@@ -28,10 +28,10 @@ fi
 
 # number of files in the directory and all subdirectories contains the string and the number of matching lines found in respective files.
 cd $filesdir
-num_files="$(grep -Ilcr "$searchstr" | wc -l)"
+num_files="$(grep -lr "$searchstr" *.* | wc -l)"
 #echo "Number of files containing $searchstr : $num_files"
 #echo $num_files
-num_lines="$(grep -Ir "$searchstr" | wc -l)"
+num_lines="$(grep -r "$searchstr" *.* | wc -l)"
 #echo "Number of lines containing $searchstr : $num_lines"
 #echo $num_lines
 

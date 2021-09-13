@@ -125,13 +125,11 @@ make CROSS_COMPILE=${CROSS_COMPILE}
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
 echo "Copying finder related scripts to /home directory"
-cp finder-test.sh ${OUTDIR}/rootfs/home
-cp finder.sh ${OUTDIR}/rootfs/home
-cp conf/ -r ${OUTDIR}/rootfs/home
-cp autorun-qemu.sh ${OUTDIR}/rootfs/home
-cp Makefile ${OUTDIR}/rootfs/home
-cp writer.c ${OUTDIR}/rootfs/home
-cp writer ${OUTDIR}/rootfs/home
+cp ./finder-test.sh ${OUTDIR}/rootfs/home
+cp ./finder.sh ${OUTDIR}/rootfs/home
+cp ./conf/ -r ${OUTDIR}/rootfs/home
+cp ./autorun-qemu.sh ${OUTDIR}/rootfs/home
+cp ./writer ${OUTDIR}/rootfs/home
 
 # TODO: Chown the root directory
 echo "Chowning the root directory"
@@ -144,6 +142,7 @@ echo "Creating initramfs.cpio.gz"
 cd ${OUTDIR}/rootfs
 find . | cpio -H newc -ov --owner root:root > ../initramfs.cpio
 cd ..
+rm -f initramfs.cpio.gz
 gzip initramfs.cpio
 
 
