@@ -1,5 +1,14 @@
 #include "systemcalls.h"
 
+#include <stdlib.h>
+
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#include <fcntl.h>
+
+#include <syslog.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the commands in ... with arguments @param arguments were executed 
@@ -16,8 +25,32 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success 
  *   or false() if it returned a failure
 */
+    int 	status;
 
-    return true;
+    status = system(cmd);
+    	
+    // from man page: 
+    // 1. If all system calls succeed, then the return value is the termination status of the child shell
+    // 2. the return value is a "wait status" that can be examined using the macros described in waitpid(2).  (i.e., WIFEXITED(), WEXITSTATUS(), and so on).
+    
+    if(!WIFEXITED(status))	// returns false if the child is not terminated normally
+    {
+    	syslog(LOG_ERR, "WIFEXITED: Child is not terminated normally\n");
+    	return false;
+    }
+    
+    // WEXITSTATUS should be employed only if WIFEXITED returned true.
+    if(WEXITSTATUS(status) != 0)	// return false if child is not ending normally
+    {
+    	syslog(LOG_ERR, "EXITSTATUS: Child is not ending normally\n");
+    	return false;
+    }
+
+    else
+    {
+    	return true;
+    }
+    
 }
 
 /**
@@ -58,7 +91,38 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *   
 */
-
+    int 	status;
+    pid_t 	pid;
+    
+    
+    
+    pid = fork();
+    
+    if(pid == -1)	// creation of child process failed
+    {
+    	return false;
+    }
+    
+    else if(pid == 0)
+    {
+    	execv(command[0], command);
+    	exit(-1);
+    }
+    
+    if(waitpid(pid, &status, 0) == -1)
+    {
+    	return false;
+    }
+    
+    else if(WIFEXITED(status))
+    {
+    	if(WEXITSTATUS(status) != 0)	// return false if child is not ending normally
+    	{
+    	    syslog(LOG_ERR, "EXITSTATUS: Child is not ending normally\n");
+    	    return false;
+    	}
+    }
+    
     va_end(args);
 
     return true;
@@ -93,6 +157,59 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   
 */
 
+    int 	status;
+    int 	fd;
+    pid_t 	pid;
+    
+    
+    fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+    
+    if(fd == -1)
+    {
+    	perror("failed to open file\n");
+    	
+    	return false;
+    }
+    
+    pid = fork();
+    
+    if(pid == -1)	// creation of child process failed
+    {
+    	return false;
+    }
+    
+    else if(pid == 0)
+    {
+    	if (dup2(fd, 1) == -1)
+    	{
+    	    perror("dup2 failed\n");
+    	    
+    	    return false;
+    	}
+    	
+    	close(fd);
+    	
+    	execvp(command[0], command); 
+    	perror("execvp failed\n");
+    	
+    	return false;
+    }
+    
+    if(waitpid(pid, &status, 0) == -1)
+    {
+    	return false;
+    }
+    
+    else if(WIFEXITED(status))
+    {
+    	if(WEXITSTATUS(status) != 0)	// return false if child is not ending normally
+    	{
+    	    syslog(LOG_ERR, "EXITSTATUS: Child is not ending normally\n");
+    	    return false;
+    	}
+    }
+    
+    
     va_end(args);
     
     return true;
