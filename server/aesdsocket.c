@@ -3,8 +3,6 @@
 * Date: 09.30.2021
 * Reference: 
 * https://beej.us/guide/bgnet/html/
-* https://www.educative.io/edpresso/how-to-implement-tcp-sockets-in-c
-* https://www.csd.uoc.gr/~hy556/material/tutorials/cs556-3rd-tutorial.pdf
 ***********************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,18 +27,26 @@
 #define       PORT               9000       // the port users will be connecting to
 #define       OUTPUT_FILE        "/var/tmp/aesdsocketdata"
 #define       MAX_CONNECTION     4         // maximum length to which the queue of pending connections for sockfd may grow.
+#define       BUFFER_SIZE        500
 
 
 void *get_in_addr(struct sockaddr *sa);
+void termination_handler();
 
 
 struct sockaddr_in    server_addr;
 struct sockaddr_in    client_addr;
 int                   server_fd;
+int                   client_fd;
+
+
 
 int main(int argc, char *argv[])
 {
-    pid_t  pid = 0;
+    pid_t      pid = 0;
+    bool       daemon_flag = false;
+
+
     // setup syslog
     openlog(NULL, 0, LOG_USER);
     
@@ -69,16 +75,29 @@ int main(int argc, char *argv[])
 
     printf("Done with binding\n");
     
-    pid = fork();
-    if(pid < 0)
+    if(daemon_flag == true)
     {
-       perror("fork failed\n");
+        pid = fork();
+    
+        if(pid < 0)
+        {
+            perror("fork failed\n");
+            return -1;
+        }
+    
+        else if(pid > 0)
+        {
+    	    printf("parent of pid = %d\n", pid);
+    	    exit(0);
+        }
+        
+        else
+        {
+            printf("child process created\n");
+        }
     }
     
-    else if(pid > 0)
-    {
-    	printf("parent of pid = %d\n", pid);
-    }
+    
         
     if(listen(server_fd, MAX_CONNECTION)<0)
     {
@@ -94,8 +113,44 @@ int main(int argc, char *argv[])
         syslog(LOG_ERR, "open() failed\n");
         return -1;
     }
+    
+    while(1)
+    {
+        client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
+        
+        if(client_fd == -1)
+    	{
+    	    perror("socket is not accepting successfully\n");
+    	    return -1;
+    	}
+    	else
+    	{
+    	    char client_ip6[INET6_ADDRSTRLEN]; // space to hold the IPv6 string
+    	    inet_ntop(AF_INET, get_in_addr((struct sockaddr*)&client_addr), client_ip6, sizeof client_ip6);
+    	    syslog(LOG_DEBUG, "Accepted connection from %s", client_ip6);
+    	}
+    	
+    	int received_bytes_cnt = 0;
+    	char buf[BUFFER_SIZE];
+    	memset(buf, 0, sizeof(buf));
+    	
+    	
+    	do
+    	{
+    	    received_bytes_cnt = recv(client_fd, buf, sizeof buf, 0);
+    	    if(received_bytes_cnt == -1)
+    	    {
+    	        printf("recv failed\n");
+    	    }
+    	    
+    	
+    	}while(buf[received_bytes_cnt-1] != '\n');
+    	
+    }
+    
+    
+    
 }
-
 
 
 // get sockaddr, IPv4 or IPv6:
@@ -124,4 +179,11 @@ void termination_handler()
     }
     
     exit(0);
+}
+
+
+void write_append_file(char *filename, char *content, int lenth)
+{
+
+
 }
