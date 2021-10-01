@@ -36,11 +36,11 @@ void *get_in_addr(struct sockaddr *sa);
 
 struct sockaddr_in    server_addr;
 struct sockaddr_in    client_addr;
-int server_fd;
+int                   server_fd;
 
 int main(int argc, char *argv[])
 {
-
+    pid_t  pid = 0;
     // setup syslog
     openlog(NULL, 0, LOG_USER);
     
@@ -66,9 +66,20 @@ int main(int argc, char *argv[])
         printf("Couldn't bind to the port\n");
         return -1;
     }
-    
+
     printf("Done with binding\n");
     
+    pid = fork();
+    if(pid < 0)
+    {
+       perror("fork failed\n");
+    }
+    
+    else if(pid > 0)
+    {
+    	printf("parent of pid = %d\n", pid);
+    }
+        
     if(listen(server_fd, MAX_CONNECTION)<0)
     {
     	perror("Server listen failed\n");
@@ -96,4 +107,21 @@ void *get_in_addr(struct sockaddr *sa)
     }
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+
+void termination_handler()
+{
+    syslog(LOG_DEBUG, "Caught signal, exiting\n");
+    
+    close(fd);
+    close(server_fd);
+    closelog();
+    
+    if(remove(OUTPUT_FILE) < 0)
+    {
+    	syslog(LOG_DEBUG, "Remove %s failed\n", OUTPUT_FILE);
+    }
+    
+    exit(0);
 }
