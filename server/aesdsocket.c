@@ -24,15 +24,15 @@
 
 
 
-#define       PORT               9000       // the port users will be connecting to
-#define       OUTPUT_FILE        "/var/tmp/aesdsocketdata"
-#define       MAX_CONNECTION     4         // maximum length to which the queue of pending connections for sockfd may grow.
-#define       BUFFER_SIZE        500
+#define       PORT                   9000       // the port users will be connecting to
+#define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
+#define       MAX_CONNECTION         4         // maximum length to which the queue of pending connections for sockfd may grow.
+#define       BUFFER_SIZE            500
 
 
 void *get_in_addr(struct sockaddr *sa);
 void termination_handler();
-
+void write_append_file(char* filename, char* content, int lenth);
 
 struct sockaddr_in    server_addr;
 struct sockaddr_in    client_addr;
@@ -43,9 +43,9 @@ int                   client_fd;
 
 int main(int argc, char *argv[])
 {
-    pid_t      pid = 0;
-    bool       daemon_flag = false;
-
+    pid_t          pid = 0;
+    bool           daemon_flag = false;
+    socklen_t      addr_size;
 
     // setup syslog
     openlog(NULL, 0, LOG_USER);
@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, termination_handler);
     
     
-    server_fd = socket(PF_INET, SOCK_STREAM, 0);
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if(server_fd == -1)
     {
     	perror("Socket is not created successfully\n");
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
     }
     
     // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT, 0644);
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
     if(fd < 0)
     {
@@ -116,7 +116,7 @@ int main(int argc, char *argv[])
     
     while(1)
     {
-        client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &addr_size);
+        client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_size);
         
         if(client_fd == -1)
     	{
@@ -130,26 +130,47 @@ int main(int argc, char *argv[])
     	    syslog(LOG_DEBUG, "Accepted connection from %s", client_ip6);
     	}
     	
-    	int received_bytes_cnt = 0;
+    	int received_bytes = 0;
+    	int current_in_buf_bytes = 0;
     	char buf[BUFFER_SIZE];
     	memset(buf, 0, sizeof(buf));
     	
+    	char* content_buf = NULL;
+    	int content_buf_size = BUFFER_SIZE;
+    	content_buf = (char*)malloc(sizeof(char) * content_buf_size);
     	
     	do
     	{
-    	    received_bytes_cnt = recv(client_fd, buf, sizeof buf, 0);
-    	    if(received_bytes_cnt == -1)
+    	    received_bytes = recv(client_fd, buf, sizeof buf, 0);
+    	    
+    	    if(received_bytes == -1)
     	    {
     	        printf("recv failed\n");
     	    }
     	    
+    	    // check if malloced size is enough to hold new appended contents, otherwise realloc
+    	    while( (received_bytes + current_in_buf_bytes) >= content_buf_size )
+    	    {
+    	        contect_buf_size += BUFFER_SIZE;
+    	    }
+    	    
+    	    content_buf = (char*)realloc(sizeof(char) * content_buf_size);
+    	    
+    	    memcpy(&content_buf[current_in_buf_bytes], buf, received_bytes);
+    	    
+    	    current_in_buf_bytes += received_bytes;
+    	    	
+    	}while(buf[received_bytes-1] != '\n');
     	
-    	}while(buf[received_bytes_cnt-1] != '\n');
+    	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
+    	
+    	if(write_bytes != current_in_buf_bytes)
+    	{
+    	    printf("not completely written\n");
+    	}
+    	
     	
     }
-    
-    
-    
 }
 
 
@@ -179,11 +200,4 @@ void termination_handler()
     }
     
     exit(0);
-}
-
-
-void write_append_file(char *filename, char *content, int lenth)
-{
-
-
 }
