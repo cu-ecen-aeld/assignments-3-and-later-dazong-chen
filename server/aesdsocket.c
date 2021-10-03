@@ -27,7 +27,7 @@
 #define       PORT                   9000       // the port users will be connecting to
 #define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
 #define       MAX_CONNECTION         4         // maximum length to which the queue of pending connections for sockfd may grow.
-#define       BUFFER_SIZE            500
+#define       BUFFER_SIZE            22000
 
 
 void *get_in_addr(struct sockaddr *sa);
@@ -172,9 +172,9 @@ int main(int argc, char *argv[])
     	do
     	{
     	    
-    	    received_bytes = recv(client_fd, buf, sizeof buf, 0);
+    	    received_bytes = recv(client_fd, buf, BUFFER_SIZE, 0);
     	    
-    	    printf("buf %s",buf);
+    	    //printf("buf %s",buf);
     	    
     	    if(received_bytes == -1)
     	    {
@@ -202,23 +202,22 @@ int main(int argc, char *argv[])
     	    
     	    memcpy(&content_buf[current_in_buf_bytes], buf, received_bytes);
     	    
-    	    printf("content buf %s", content_buf);
     	    current_in_buf_bytes += received_bytes;
-    	    printf("current_in_buf_bytes %d\n", current_in_buf_bytes);
+
     	    	
     	}while(!newline_flag);
         
-    	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
-    	printf("write bytes %ld\n", write_bytes);
+    	ssize_t write_bytes = write(fd, content_buf+current_in_buf_bytes-received_bytes, received_bytes);
+    	//printf("write bytes %ld\n", write_bytes);
     	
-    	if(write_bytes != current_in_buf_bytes)
+    	if(write_bytes != received_bytes)
     	{
     	    printf("not completely written\n");
     	}
     	
-    	int size = lseek(fd, 0, SEEK_CUR);
+    	off_t size = lseek(fd, 0, SEEK_CUR);
     	
-    	printf("size = %d\n", size);
+    	//printf("size = %d\n", size);
     	
     	tmp = realloc(content_buf2, sizeof(char) * size);
     	
@@ -230,8 +229,6 @@ int main(int argc, char *argv[])
     	lseek(fd, 0, SEEK_SET);
     	ssize_t read_bytes = read(fd, content_buf2, size);
     	
-    	printf("content buf 2 from file %s", content_buf2);
-    	printf("read bytes from file %ld\n", read_bytes);
     	
     	if(read_bytes == -1)
     	{
