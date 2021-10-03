@@ -32,12 +32,12 @@
 
 void *get_in_addr(struct sockaddr *sa);
 void termination_handler();
-void write_append_file(char* filename, char* content, int lenth);
 
 struct sockaddr_in    server_addr;
 struct sockaddr_in    client_addr;
 int                   server_fd;
 int                   client_fd;
+int                   fd;
 
 
 
@@ -46,6 +46,7 @@ int main(int argc, char *argv[])
     pid_t          pid = 0;
     bool           daemon_flag = false;
     socklen_t      addr_size;
+    sigset_t       mask;
 
     // setup syslog
     openlog(NULL, 0, LOG_USER);
@@ -54,17 +55,29 @@ int main(int argc, char *argv[])
     signal(SIGINT, termination_handler);
     signal(SIGTERM, termination_handler);
     
+    // signals to be masked
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGINT);
+    sigaddset(&mask, SIGTERM);
     
-    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if(argc == 2)
+    {
+        if(strcmp(argv[1], "-d") == 0)
+        {
+            daemon_flag = true;
+        }
+    }
+    
+    server_fd = socket(PF_INET, SOCK_STREAM, 0);
     if(server_fd == -1)
     {
     	perror("Socket is not created successfully\n");
     	return -1;
     }
     
-    server_addr->sin_family = AF_INET;
-    server_addr->sin_port = htons(PORT);
-    server_addr->sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
     
     // Bind to the set port and IP:
     if(bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr))<0)
@@ -95,9 +108,18 @@ int main(int argc, char *argv[])
         {
             printf("child process created\n");
         }
+        
+        if(setsid() == -1)
+        {
+            printf("failed create new session\n");
+            return -1;
+        }
     }
     
     
+    
+    // change to root
+    chdir("/");
         
     if(listen(server_fd, MAX_CONNECTION)<0)
     {
@@ -139,7 +161,16 @@ int main(int argc, char *argv[])
     	int content_buf_size = BUFFER_SIZE;
     	content_buf = (char*)malloc(sizeof(char) * content_buf_size);
     	
-    	do
+    	bool newline_flag = false;
+    	
+    	
+    	// stop receiving signal while receiving/sending data
+    	if(sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
+    	{
+    	    printf("failed blocking signal\n");
+    	} 
+    	
+    	while(!newline_flag)
     	{
     	    received_bytes = recv(client_fd, buf, sizeof buf, 0);
     	    
@@ -148,20 +179,26 @@ int main(int argc, char *argv[])
     	        printf("recv failed\n");
     	    }
     	    
-    	    // check if malloced size is enough to hold new appended contents, otherwise realloc
-    	    while( (received_bytes + current_in_buf_bytes) >= content_buf_size )
+    	    if(strchr(buf, '\n') != NULL)
     	    {
-    	        contect_buf_size += BUFFER_SIZE;
+    	        newline_flag = true;
     	    }
     	    
-    	    content_buf = (char*)realloc(sizeof(char) * content_buf_size);
+    	    // check if malloced size is enough to hold new appended contents, otherwise realloc
+    	    if( (received_bytes + current_in_buf_bytes) >= content_buf_size )
+    	    {
+    	        content_buf_size += BUFFER_SIZE;
+    	    }
+    	    
+    	    content_buf = (char*)realloc(content_buf, sizeof(char) * content_buf_size);
     	    
     	    memcpy(&content_buf[current_in_buf_bytes], buf, received_bytes);
     	    
     	    current_in_buf_bytes += received_bytes;
     	    	
-    	}while(buf[received_bytes-1] != '\n');
-    	
+    	}
+
+    
     	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
     	
     	if(write_bytes != current_in_buf_bytes)
@@ -169,6 +206,36 @@ int main(int argc, char *argv[])
     	    printf("not completely written\n");
     	}
     	
+    	lseek(fd, 0, SEEK_CUR);
+    	lseek(fd, 0, SEEK_SET);
+    	
+    	char *content_buf2 = NULL;
+    	content_buf2 = (char*)malloc(sizeof(char) * current_in_buf_bytes);
+    	
+    	ssize_t read_bytes = read(fd, content_buf2, current_in_buf_bytes);
+    	
+    	if(read_bytes == -1)
+    	{
+    	    printf("read failed\n");
+    	}
+    	
+    	ssize_t send_bytes = send(client_fd, content_buf2, read_bytes, 0);
+    	if(send_bytes == -1)
+    	{
+    	    printf("send failed\n");
+    	}
+    	
+    	
+    	// Unmask signals after receive/send
+    	if(sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
+    	{
+    	    printf("failed blocking signal\n");
+    	} 
+    	
+    	free(content_buf);
+    	free(content_buf2);
+    	
+    	close(client_fd);
     	
     }
 }
@@ -192,6 +259,7 @@ void termination_handler()
     
     close(fd);
     close(server_fd);
+    close(client_fd);
     closelog();
     
     if(remove(OUTPUT_FILE) < 0)
