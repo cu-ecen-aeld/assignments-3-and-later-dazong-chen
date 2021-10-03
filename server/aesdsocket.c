@@ -3,6 +3,7 @@
 * Date: 09.30.2021
 * Reference: 
 * https://beej.us/guide/bgnet/html/
+* http://www.microhowto.info/howto/cause_a_process_to_become_a_daemon_in_c.html
 ***********************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,7 +28,7 @@
 #define       PORT                   9000       // the port users will be connecting to
 #define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
 #define       MAX_CONNECTION         4         // maximum length to which the queue of pending connections for sockfd may grow.
-#define       BUFFER_SIZE            22000
+#define       BUFFER_SIZE            500
 
 
 void *get_in_addr(struct sockaddr *sa);
@@ -125,6 +126,10 @@ int main(int argc, char *argv[])
         
         // change to root
         chdir("/");
+        
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
     }
     
     if(listen(server_fd, MAX_CONNECTION)<0)
@@ -169,7 +174,10 @@ int main(int argc, char *argv[])
     	} 
     	
     	bool newline_flag = false;
-    	do
+    	
+    	current_in_buf_bytes = 0;   // overwrite content buf
+    	
+    	do	// read a line
     	{
     	    
     	    received_bytes = recv(client_fd, buf, BUFFER_SIZE, 0);
@@ -191,7 +199,6 @@ int main(int argc, char *argv[])
     	    {
     	        content_buf_size += BUFFER_SIZE;
     	        
-    	        
     	        tmp = (char*)realloc(content_buf, sizeof(char) * content_buf_size);
     	    
     	        if(tmp != NULL)
@@ -200,22 +207,24 @@ int main(int argc, char *argv[])
     	        }
     	    }
     	    
-    	    memcpy(&content_buf[current_in_buf_bytes], buf, received_bytes);
+    	    memcpy(content_buf+current_in_buf_bytes, buf, received_bytes);
     	    
     	    current_in_buf_bytes += received_bytes;
 
     	    	
     	}while(!newline_flag);
         
-    	ssize_t write_bytes = write(fd, content_buf+current_in_buf_bytes-received_bytes, received_bytes);
+        
+    	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
+    	
     	//printf("write bytes %ld\n", write_bytes);
     	
-    	if(write_bytes != received_bytes)
+    	if(write_bytes != current_in_buf_bytes)
     	{
     	    printf("not completely written\n");
     	}
     	
-    	off_t size = lseek(fd, 0, SEEK_CUR);
+    	off_t size = lseek(fd, 0, SEEK_CUR);   // file size
     	
     	//printf("size = %d\n", size);
     	
