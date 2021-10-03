@@ -41,12 +41,20 @@ int                   fd;
 char* content_buf = NULL;
 char* content_buf2 = NULL;
 
+
 int main(int argc, char *argv[])
 {
     pid_t          pid = 0;
     bool           daemon_flag = false;
     socklen_t      addr_size;
     sigset_t       mask;
+    
+    int received_bytes = 0;
+    int current_in_buf_bytes = 0;
+    char buf[BUFFER_SIZE];
+    int content_buf_size = BUFFER_SIZE;
+    char *tmp = NULL;
+    memset(buf, 0, sizeof(buf));
 
     // setup syslog
     openlog(NULL, 0, LOG_USER);
@@ -134,16 +142,8 @@ int main(int argc, char *argv[])
         return -1;
     }
     
-    
-    
-    int received_bytes = 0;
-    int current_in_buf_bytes = 0;
-    char buf[BUFFER_SIZE];
-    memset(buf, 0, sizeof(buf));
-    
-    int content_buf_size = BUFFER_SIZE;
     content_buf = (char*)malloc(sizeof(char) * content_buf_size);
-    	
+    content_buf2 = (char*)malloc(sizeof(char) * content_buf_size);
     
     
     while(1)
@@ -191,7 +191,7 @@ int main(int argc, char *argv[])
     	    {
     	        content_buf_size += BUFFER_SIZE;
     	        
-    	        char *tmp = NULL;
+    	        
     	        tmp = (char*)realloc(content_buf, sizeof(char) * content_buf_size);
     	    
     	        if(tmp != NULL)
@@ -209,28 +209,36 @@ int main(int argc, char *argv[])
     	}while(!newline_flag);
         
     	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
+    	printf("write bytes %ld\n", write_bytes);
     	
     	if(write_bytes != current_in_buf_bytes)
     	{
     	    printf("not completely written\n");
     	}
     	
-    	lseek(fd, 0, SEEK_CUR);
+    	int size = lseek(fd, 0, SEEK_CUR);
+    	
+    	printf("size = %d\n", size);
+    	
+    	tmp = realloc(content_buf2, sizeof(char) * size);
+    	
+    	if(tmp != NULL)
+        {
+            content_buf2 = tmp;
+        }
+    	
     	lseek(fd, 0, SEEK_SET);
+    	ssize_t read_bytes = read(fd, content_buf2, size);
     	
-    	
-    	content_buf2 = (char*)malloc(sizeof(char) * current_in_buf_bytes);
-    	
-    	ssize_t read_bytes = read(fd, content_buf2, current_in_buf_bytes);
-    	
-    	printf("content buf 2 %s", content_buf2);
+    	printf("content buf 2 from file %s", content_buf2);
+    	printf("read bytes from file %ld\n", read_bytes);
     	
     	if(read_bytes == -1)
     	{
     	    printf("read failed\n");
     	}
     	
-    	ssize_t send_bytes = send(client_fd, content_buf2, current_in_buf_bytes, 0);
+    	ssize_t send_bytes = send(client_fd, content_buf2, read_bytes, 0);
     	if(send_bytes == -1)
     	{
     	    printf("send failed\n");
@@ -270,8 +278,8 @@ void termination_handler()
     close(client_fd);
     closelog();
     
-        	free(content_buf);
-    	free(content_buf2);
+    free(content_buf);
+    free(content_buf2);
     
     if(remove(OUTPUT_FILE) < 0)
     {
