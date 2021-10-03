@@ -38,8 +38,8 @@ struct sockaddr_in    client_addr;
 int                   server_fd;
 int                   client_fd;
 int                   fd;
-
-
+char* content_buf = NULL;
+char* content_buf2 = NULL;
 
 int main(int argc, char *argv[])
 {
@@ -114,13 +114,11 @@ int main(int argc, char *argv[])
             printf("failed create new session\n");
             return -1;
         }
+        
+        // change to root
+        chdir("/");
     }
     
-    
-    
-    // change to root
-    chdir("/");
-        
     if(listen(server_fd, MAX_CONNECTION)<0)
     {
     	perror("Server listen failed\n");
@@ -135,6 +133,18 @@ int main(int argc, char *argv[])
         syslog(LOG_ERR, "open() failed\n");
         return -1;
     }
+    
+    
+    
+    int received_bytes = 0;
+    int current_in_buf_bytes = 0;
+    char buf[BUFFER_SIZE];
+    memset(buf, 0, sizeof(buf));
+    
+    int content_buf_size = BUFFER_SIZE;
+    content_buf = (char*)malloc(sizeof(char) * content_buf_size);
+    	
+    
     
     while(1)
     {
@@ -152,27 +162,19 @@ int main(int argc, char *argv[])
     	    syslog(LOG_DEBUG, "Accepted connection from %s", client_ip6);
     	}
     	
-    	int received_bytes = 0;
-    	int current_in_buf_bytes = 0;
-    	char buf[BUFFER_SIZE];
-    	memset(buf, 0, sizeof(buf));
-    	
-    	char* content_buf = NULL;
-    	int content_buf_size = BUFFER_SIZE;
-    	content_buf = (char*)malloc(sizeof(char) * content_buf_size);
-    	
-    	bool newline_flag = false;
-    	
-    	
     	// stop receiving signal while receiving/sending data
     	if(sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
     	{
     	    printf("failed blocking signal\n");
     	} 
     	
-    	while(!newline_flag)
+    	bool newline_flag = false;
+    	do
     	{
+    	    
     	    received_bytes = recv(client_fd, buf, sizeof buf, 0);
+    	    
+    	    printf("buf %s",buf);
     	    
     	    if(received_bytes == -1)
     	    {
@@ -188,17 +190,24 @@ int main(int argc, char *argv[])
     	    if( (received_bytes + current_in_buf_bytes) >= content_buf_size )
     	    {
     	        content_buf_size += BUFFER_SIZE;
-    	    }
+    	        
+    	        char *tmp = NULL;
+    	        tmp = (char*)realloc(content_buf, sizeof(char) * content_buf_size);
     	    
-    	    content_buf = (char*)realloc(content_buf, sizeof(char) * content_buf_size);
+    	        if(tmp != NULL)
+    	        {
+    	            content_buf = tmp;
+    	        }
+    	    }
     	    
     	    memcpy(&content_buf[current_in_buf_bytes], buf, received_bytes);
     	    
+    	    printf("content buf %s", content_buf);
     	    current_in_buf_bytes += received_bytes;
+    	    printf("current_in_buf_bytes %d\n", current_in_buf_bytes);
     	    	
-    	}
-
-    
+    	}while(!newline_flag);
+        
     	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
     	
     	if(write_bytes != current_in_buf_bytes)
@@ -209,17 +218,19 @@ int main(int argc, char *argv[])
     	lseek(fd, 0, SEEK_CUR);
     	lseek(fd, 0, SEEK_SET);
     	
-    	char *content_buf2 = NULL;
+    	
     	content_buf2 = (char*)malloc(sizeof(char) * current_in_buf_bytes);
     	
     	ssize_t read_bytes = read(fd, content_buf2, current_in_buf_bytes);
+    	
+    	printf("content buf 2 %s", content_buf2);
     	
     	if(read_bytes == -1)
     	{
     	    printf("read failed\n");
     	}
     	
-    	ssize_t send_bytes = send(client_fd, content_buf2, read_bytes, 0);
+    	ssize_t send_bytes = send(client_fd, content_buf2, current_in_buf_bytes, 0);
     	if(send_bytes == -1)
     	{
     	    printf("send failed\n");
@@ -231,10 +242,7 @@ int main(int argc, char *argv[])
     	{
     	    printf("failed blocking signal\n");
     	} 
-    	
-    	free(content_buf);
-    	free(content_buf2);
-    	
+
     	close(client_fd);
     	
     }
@@ -261,6 +269,9 @@ void termination_handler()
     close(server_fd);
     close(client_fd);
     closelog();
+    
+        	free(content_buf);
+    	free(content_buf2);
     
     if(remove(OUTPUT_FILE) < 0)
     {
