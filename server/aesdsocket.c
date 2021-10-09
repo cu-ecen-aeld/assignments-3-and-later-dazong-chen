@@ -23,6 +23,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <pthread.h>
+#include <time.h>
+
 
 
 #define       PORT                   9000       // the port users will be connecting to
