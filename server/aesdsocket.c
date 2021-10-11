@@ -33,7 +33,7 @@
 
 #define       PORT                   9000       // the port users will be connecting to
 #define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
-#define       MAX_CONNECTION         4         // maximum length to which the queue of pending connections for sockfd may grow.
+#define       MAX_CONNECTION         10         // number of connections to which the queue of pending connections for sockfd may grow.
 #define       BUFFER_SIZE            500
 
 
@@ -93,7 +93,7 @@ struct sockaddr_in    client_addr;
 int                   server_fd;
 int                   client_fd;
 int                   fd;
-bool shut_down_flag = false;
+bool                  shut_down_flag = false;
 
 
 int main(int argc, char *argv[])
@@ -104,19 +104,18 @@ int main(int argc, char *argv[])
     sigset_t       mask;
     int            thread_id = 1;
     char           buf[BUFFER_SIZE];
-    bool           shut_down_flag = false;
 
     memset(buf, 0, sizeof(buf));
     
     slist_data_t *datap = NULL;
     
-    struct sigevent    sev;
-    timer_data_t       td;
+
     int clock_id = CLOCK_MONOTONIC;
     
     SLIST_HEAD(slisthead, slist_data_s) head;
     SLIST_INIT(&head);
 
+    
     // setup syslog
     openlog(NULL, 0, LOG_USER);
     
@@ -138,6 +137,7 @@ int main(int argc, char *argv[])
     }
     
     server_fd = socket(PF_INET, SOCK_STREAM, 0);
+    
     if(server_fd == -1)
     {
     	perror("Socket is not created successfully\n");
@@ -145,7 +145,8 @@ int main(int argc, char *argv[])
     }
     
     int option = 1;
-    /* Forcefully attaching socket to the port 9000 for bind error: address in use */
+    
+    // attaching socket to the port 9000 to avoid bind error
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &option, sizeof(option)) == -1)
     {
         perror("setsockopt failed");
@@ -163,7 +164,26 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    printf("Done with binding\n");
+    else
+    {
+        printf("Done with binding\n");
+    }
+    
+    
+    if(listen(server_fd, MAX_CONNECTION) == -1)
+    {
+    	perror("Server listen failed\n");
+    	return -1;
+    }
+    
+    // create output file
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    
+    if(fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        return -1;
+    }
     
     if(daemon_flag == true)
     {
@@ -199,23 +219,10 @@ int main(int argc, char *argv[])
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
     }
+
     
-    if(listen(server_fd, MAX_CONNECTION) == -1)
-    {
-    	perror("Server listen failed\n");
-    	return -1;
-    }
-    
-    // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-    
-    if(fd < 0)
-    {
-        syslog(LOG_ERR, "open() failed\n");
-        return -1;
-    }
-    
-    
+    struct sigevent    sev;
+    timer_data_t       td;
     td.fd = fd;
     /**
     * Setup a call to timer_thread passing in the td structure as the sigev_value
@@ -242,7 +249,7 @@ int main(int argc, char *argv[])
     
     struct itimerspec itimerspec;
     itimerspec.it_interval.tv_sec = 10;
-    itimerspec.it_interval.tv_nsec = 10;
+    itimerspec.it_interval.tv_nsec = 0;
     
     timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
     
@@ -255,22 +262,26 @@ int main(int argc, char *argv[])
     {
         client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_size);
         
+        if(client_fd == -1)
+    	{
+    	    perror("socket is not accepting successfully\n");
+    	    printf("socket is not accepting successfully\n");
+    	    break;
+    	    //return -1;
+    	}
+        
         if(shut_down_flag == true)
         {
             break;
         }
         
-        if(client_fd == -1)
-    	{
-    	    perror("socket is not accepting successfully\n");
-    	    return -1;
-    	}
+        
     	else
     	{
     	    char client_ip6[INET6_ADDRSTRLEN]; // space to hold the IPv6 string
     	    inet_ntop(AF_INET, get_in_addr((struct sockaddr*)&client_addr), client_ip6, sizeof client_ip6);
     	    syslog(LOG_DEBUG, "Accepted connection from %s", client_ip6);
-    	    
+    	    printf("Accepted connection from %s\n", client_ip6);
     	    
     	    // create new thread
     	    datap = malloc(sizeof(slist_data_t));
@@ -280,9 +291,12 @@ int main(int argc, char *argv[])
     	    datap->threadParams.mask = mask;
     	    datap->threadParams.is_completed = false;
     	    
+    	    thread_id++;
+    	    
     	    SLIST_INSERT_HEAD(&head, datap, entries);
     	    
-    	    pthread_create(&(datap->threadParams.thread),(void*)0, send_receive_packet,(void*)&(datap->threadParams));
+    	    pthread_create(&(datap->threadParams.thread), NULL, send_receive_packet,(void*)&(datap->threadParams));
+    	    
     	    SLIST_FOREACH(datap, &head, entries)
     	    {
     	        if((datap->threadParams).is_completed == true)
@@ -294,6 +308,7 @@ int main(int argc, char *argv[])
     	}
     }
     
+
     close(fd);
     close(client_fd);
     close(server_fd);
@@ -336,19 +351,28 @@ void* send_receive_packet(void* threadp)
     threadParams->read_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE);
     threadParams->write_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE);
     
+    if(sigprocmask(SIG_BLOCK, &threadParams->mask, NULL) == -1)
+    {
+        printf("failed blocking signal\n");
+    	exit(-1);
+    } 
+    
     
     do	// reading a line
     {
-        received_bytes = recv(threadParams->client_fd, buf, BUFFER_SIZE, 0);
+        received_bytes = recv(threadParams->client_fd, buf, BUFFER_SIZE-1, 0);
 	    
-	//printf("buf %s",buf);
-	    
+	
+	
+	
 	if(received_bytes == -1)
 	{
 	    printf("recv failed\n");
 	    pthread_exit(threadParams);
 	}
-	    
+	
+	buf[received_bytes] = 0;
+	
 	if(strchr(buf, '\n') != NULL)
 	{
 	    newline_flag = true;
@@ -379,18 +403,18 @@ void* send_receive_packet(void* threadp)
     	 
     }while(!newline_flag);
     
-
-    pthread_mutex_lock(&locker);
+    newline_flag = false;
     
-    // stop receiving signal while writing data to file
-    if(sigprocmask(SIG_BLOCK, &threadParams->mask, NULL) == -1)
+    if(sigprocmask(SIG_UNBLOCK, &threadParams->mask, NULL) == -1)
     {
-        printf("failed blocking signal\n");
+        printf("failed unblocking signal\n");
     	exit(-1);
     } 
+
+    pthread_mutex_lock(&locker);
+    ssize_t write_bytes = write(threadParams->fd, threadParams->read_buf, current_in_buf_bytes);    // write to file
+    pthread_mutex_unlock(&locker);
     
-    ssize_t write_bytes = write(threadParams->fd, threadParams->read_buf, current_in_buf_bytes);
-    	
     //printf("write bytes %ld\n", write_bytes);
     if(write_bytes != current_in_buf_bytes)
     {
@@ -404,7 +428,7 @@ void* send_receive_packet(void* threadp)
         exit(-1);
     }
     
-    pthread_mutex_unlock(&locker);
+    
     
     lseek(threadParams->fd, 0, SEEK_SET);
     
@@ -415,14 +439,6 @@ void* send_receive_packet(void* threadp)
     int packet_size = 0;
     
     pthread_mutex_lock(&locker);
-    
-    // Block signals to avoid partial write
-    if(sigprocmask(SIG_BLOCK, &(threadParams->mask), NULL) == -1)
-    {
-        printf("failed blocking signal\n");
-    	exit(-1);
-    }
-    
     while( (nbytes = read(threadParams->fd, &byte_content,1)) > 0 )
     {
         if(packet_size >= send_buf_size)   // reallocate memory if not enough space
@@ -448,7 +464,20 @@ void* send_receive_packet(void* threadp)
         
         if(byte_content == '\n')    // read in newline, send the packet
         {   
+            // Block signals to avoid partial send
+            if(sigprocmask(SIG_BLOCK, &(threadParams->mask), NULL) == -1)
+            {
+                printf("failed blocking signal\n");
+    	        exit(-1);
+            }
+        
             ssize_t send_bytes = send(threadParams->client_fd, threadParams->write_buf, packet_size, 0);
+            
+            if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
+            {
+                perror("\nERROR sigprocmask():");
+                pthread_exit(threadParams);
+            }
             
             if(send_bytes == -1)
             {
@@ -460,14 +489,6 @@ void* send_receive_packet(void* threadp)
         }
     }
     
-    pthread_mutex_unlock(&locker);
-    
-    if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
-    {
-        perror("\nERROR sigprocmask():");
-        pthread_exit(threadParams);
-    }
-
     pthread_mutex_unlock(&locker);
 
     close(threadParams->client_fd);
@@ -488,6 +509,7 @@ static void timer_thread(union sigval sigval)
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
+    time(&time_now);
     time_info = localtime(&time_now);
     size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
     
