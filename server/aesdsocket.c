@@ -176,14 +176,7 @@ int main(int argc, char *argv[])
     	return -1;
     }
     
-    // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
-    if(fd < 0)
-    {
-        syslog(LOG_ERR, "open() failed\n");
-        return -1;
-    }
     
     if(daemon_flag == true)
     {
@@ -220,8 +213,15 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
 
-    //if((daemon_flag == false) || (pid == 0))
-    //{
+    // create output file
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    
+    if(fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        return -1;
+    }
+
     struct sigevent    sev;
     timer_data_t       td;
     td.fd = fd;
@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
     close(client_fd);
     close(server_fd);
     timer_delete(timerid);
-    //remove(OUTPUT_FILE);
+    remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
