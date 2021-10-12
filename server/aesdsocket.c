@@ -317,6 +317,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
+    timer_delete(timerid);
     remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
