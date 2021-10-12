@@ -565,7 +565,7 @@ static void timer_thread(union sigval sigval)
     }
     
     pthread_mutex_unlock(&locker);
-    close(fd);
+    //close(fd);
 }
 
 
