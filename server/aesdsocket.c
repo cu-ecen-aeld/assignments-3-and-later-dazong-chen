@@ -94,7 +94,7 @@ int                   server_fd;
 int                   client_fd;
 int                   fd;
 bool                  shut_down_flag = false;
-
+timer_t             timerid;
 
 int main(int argc, char *argv[])
 {
@@ -234,7 +234,7 @@ int main(int argc, char *argv[])
     sev.sigev_notify_function = timer_thread;
     
     struct timespec     start_time;
-    timer_t             timerid;
+    
     
     if ( timer_create(clock_id, &sev, &timerid) != 0 )
     {
