@@ -539,6 +539,18 @@ static void timer_thread(union sigval sigval)
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
+    
+    /*
+    // create output file
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    
+    if(fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        return -1;
+    }
+    */
+    
     time(&time_now);
     time_info = localtime(&time_now);
     size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
@@ -553,6 +565,7 @@ static void timer_thread(union sigval sigval)
     }
     
     pthread_mutex_unlock(&locker);
+    close(fd);
 }
 
 
