@@ -176,7 +176,14 @@ int main(int argc, char *argv[])
     	return -1;
     }
     
+    // create output file
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
+    if(fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        return -1;
+    }
     
     if(daemon_flag == true)
     {
@@ -213,15 +220,8 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
 
-    // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-    
-    if(fd < 0)
+    if((daemon_flag == false) || (pid == 0))
     {
-        syslog(LOG_ERR, "open() failed\n");
-        return -1;
-    }
-
     struct sigevent    sev;
     timer_data_t       td;
     td.fd = fd;
@@ -252,7 +252,7 @@ int main(int argc, char *argv[])
     itimerspec.it_interval.tv_sec = 10;
     itimerspec.it_interval.tv_nsec = 0;
     itimerspec.it_value.tv_sec = 10;
-    itimerspec.it_value.tv_nsec = 0;
+    itimerspec.it_value.tv_nsec = 10;
     
     timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
     
@@ -260,9 +260,7 @@ int main(int argc, char *argv[])
     {
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
-    //}
-    
-    
+    }
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
     
@@ -318,11 +316,7 @@ int main(int argc, char *argv[])
     }
     
 
-    close(fd);
-    close(client_fd);
-    close(server_fd);
-    timer_delete(timerid);
-    remove(OUTPUT_FILE);
+
 
     while (!SLIST_EMPTY(&head))
     {
@@ -330,6 +324,13 @@ int main(int argc, char *argv[])
 	SLIST_REMOVE_HEAD(&head, entries);
 	free(datap);
     }
+    
+    close(fd);
+    close(client_fd);
+    close(server_fd);
+    pthread_mutex_destroy(&locker);
+    timer_delete(timerid);
+    remove(OUTPUT_FILE);
     
     return 0;
 }
@@ -539,18 +540,6 @@ static void timer_thread(union sigval sigval)
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
-    
-    /*
-    // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-    
-    if(fd < 0)
-    {
-        syslog(LOG_ERR, "open() failed\n");
-        return -1;
-    }
-    */
-    
     time(&time_now);
     time_info = localtime(&time_now);
     size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
@@ -565,7 +554,6 @@ static void timer_thread(union sigval sigval)
     }
     
     pthread_mutex_unlock(&locker);
-    //close(fd);
 }
 
 
