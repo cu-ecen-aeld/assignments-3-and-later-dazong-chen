@@ -220,7 +220,8 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
 
-    
+    if((daemon_flag == false) || (pid == 0))
+    {
     struct sigevent    sev;
     timer_data_t       td;
     td.fd = fd;
@@ -257,7 +258,7 @@ int main(int argc, char *argv[])
     {
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
-    
+    }
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
     
