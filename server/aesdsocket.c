@@ -81,7 +81,7 @@ static inline void timespec_add( struct timespec *result,
     }
 }
 
-
+unsigned char* realloc_memory(const unsigned char* buf, int old_size, int new_size);
 void* send_receive_packet(void* threadp);
 void sig_handler(int signo);
 void* get_in_addr(struct sockaddr *sa);
@@ -258,8 +258,12 @@ int main(int argc, char *argv[])
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
     
+    addr_size = sizeof(struct sockaddr);
+    memset(&client_addr, 0, addr_size);
+    
     while(!shut_down_flag)
     {
+        
         client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_size);
         
         if(client_fd == -1)
@@ -343,162 +347,191 @@ void* send_receive_packet(void* threadp)
     int                   current_in_buf_bytes = 0;   // overwrite content buf
     int                   received_bytes = 0;
     char* 	          tmp = NULL;
-    int 		  content_buf_size = BUFFER_SIZE;
-    bool 	          newline_flag = false;
+    int 		          content_buf_size = BUFFER_SIZE;
+    bool 	              newline_flag = false;
     char                  buf[BUFFER_SIZE];
+	bool                  rc = true;
     
     
-    threadParams->read_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE);
-    threadParams->write_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE);
+
+
+
+
+
     
     if(sigprocmask(SIG_BLOCK, &threadParams->mask, NULL) == -1)
     {
         printf("failed blocking signal\n");
     	exit(-1);
     } 
+
+		
+    if( NULL == (threadParams->read_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE)) )
+	{
+        printf("failed to allocate read buffer\n");
+    	exit(-1);
+	}
+
+    if( NULL == (threadParams->write_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE)) )
+	{
+        printf("failed to allocate write buffer\n");
+    	exit(-1);
+	}
+
+
+	// both read/write buffers are allocated
     
-    
-    do	// reading a line
+    do	// receive a line
     {
         received_bytes = recv(threadParams->client_fd, buf, BUFFER_SIZE-1, 0);
 	    
+		if(received_bytes == -1)
+		{
+			printf("recv failed\n");
+			rc = false;
+			break;
+		}
 	
+		buf[received_bytes] = 0;
 	
-	
-	if(received_bytes == -1)
-	{
-	    printf("recv failed\n");
-	    pthread_exit(threadParams);
-	}
-	
-	buf[received_bytes] = 0;
-	
-	if(strchr(buf, '\n') != NULL)
-	{
-	    newline_flag = true;
-	}
+		if(strchr(buf, '\n') != NULL)
+		{
+			newline_flag = true;
+		}
 	    
-	// check if malloced size is enough to hold new appended contents, otherwise realloc
-	if( (received_bytes + current_in_buf_bytes) >= content_buf_size )
-	{
-	    content_buf_size += BUFFER_SIZE;
-		
-	    tmp = (char*)realloc(threadParams->read_buf, sizeof(char) * content_buf_size);
+		// check if malloced size is enough to hold new appended contents, otherwise realloc
+		if( (received_bytes + current_in_buf_bytes) >= content_buf_size )
+		{
+			
+		        tmp = (char*)realloc_memory((unsigned char*)threadParams->read_buf, content_buf_size, content_buf_size+BUFFER_SIZE);
+		        
+			// tmp = (char*)realloc(threadParams->read_buf, sizeof(char) * content_buf_size);
 	    
-	    if(tmp == NULL)
-	    {
-	        printf("readBuf realloc failed\n");
-	        free(threadParams->read_buf);
-	        pthread_exit(threadParams);
-            }
-            
-            else
-            {
-                threadParams->read_buf = tmp;
-            }
-	 }
+			if(tmp == NULL)
+			{
+				printf("readBuf realloc failed\n");
+				rc = false;
+				break;
+			}            
+			else
+			{
+			         content_buf_size += BUFFER_SIZE;
+				threadParams->read_buf = tmp;
+			}
+		 }
 	 
-	 memcpy(threadParams->read_buf+current_in_buf_bytes, buf, received_bytes);
-    	 current_in_buf_bytes += received_bytes;
+		 // append received bytes into read_buf
+		 memcpy(threadParams->read_buf+current_in_buf_bytes, buf, received_bytes);    		 
+		 current_in_buf_bytes += received_bytes;
     	 
     }while(!newline_flag);
     
-    newline_flag = false;
-    
-    if(sigprocmask(SIG_UNBLOCK, &threadParams->mask, NULL) == -1)
+
+	if(sigprocmask(SIG_UNBLOCK, &threadParams->mask, NULL) == -1)
     {
         printf("failed unblocking signal\n");
-    	exit(-1);
     } 
 
-    pthread_mutex_lock(&locker);
-    ssize_t write_bytes = write(threadParams->fd, threadParams->read_buf, current_in_buf_bytes);    // write to file
-    pthread_mutex_unlock(&locker);
+	if( rc ) // got a good buf of bytes
+	{
+		pthread_mutex_lock(&locker);
+		ssize_t write_bytes = write(threadParams->fd, threadParams->read_buf, current_in_buf_bytes);    // append to file
+		pthread_mutex_unlock(&locker);
     
-    //printf("write bytes %ld\n", write_bytes);
-    if(write_bytes != current_in_buf_bytes)
-    {
-        printf("not completely written\n");
-    }
+		//printf("write bytes %ld\n", write_bytes);
+		if(write_bytes != current_in_buf_bytes)
+		{
+			printf("not completely written\n");
+		}
+	}
     
     // Unmask signals after receive/send
     if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
     {
         perror("\nERROR sigprocmask():");
-        exit(-1);
     }
     
+	if( rc ) // write succeeded
+	{      
+		lseek(threadParams->fd, 0, SEEK_SET);
     
+		//read one byte at a time and sending one packet with newline at a time
+		char byte_content;
+		int nbytes = 0;
+		int send_buf_size = BUFFER_SIZE;
+		int packet_size = 0;
     
-    lseek(threadParams->fd, 0, SEEK_SET);
-    
-    //read one byte at a time and sending one packet with newline at a time
-    char byte_content;
-    int nbytes = 0;
-    int send_buf_size = BUFFER_SIZE;
-    int packet_size = 0;
-    
-    pthread_mutex_lock(&locker);
-    while( (nbytes = read(threadParams->fd, &byte_content,1)) > 0 )
-    {
-        if(packet_size >= send_buf_size)   // reallocate memory if not enough space
-        {
-            send_buf_size += BUFFER_SIZE;
-            tmp = realloc(threadParams->write_buf, sizeof(char) * send_buf_size);
-            if(tmp == NULL)
-	    {
-	        printf("writeBuf realloc failed\n");
-	        free(threadParams->write_buf);
-	        pthread_exit(threadParams);
-            }
-            
-            else
-            {
-                threadParams->write_buf = tmp;
-            }
-            
-            
-        }
-        
-        threadParams->write_buf[packet_size++] = byte_content;
-        
-        if(byte_content == '\n')    // read in newline, send the packet
-        {   
-            // Block signals to avoid partial send
-            if(sigprocmask(SIG_BLOCK, &(threadParams->mask), NULL) == -1)
-            {
-                printf("failed blocking signal\n");
-    	        exit(-1);
-            }
-        
-            ssize_t send_bytes = send(threadParams->client_fd, threadParams->write_buf, packet_size, 0);
-            
-            if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
-            {
-                perror("\nERROR sigprocmask():");
-                pthread_exit(threadParams);
-            }
-            
-            if(send_bytes == -1)
-            {
-                printf("send() failed\n");
-	        pthread_exit(threadParams);
-            }
-            
-            packet_size = 0;
-        }
-    }
-    
-    pthread_mutex_unlock(&locker);
+		pthread_mutex_lock(&locker);
+		while( (nbytes = read(threadParams->fd, &byte_content,1)) > 0 )
+		{
+			if(packet_size >= send_buf_size)   // reallocate memory if not enough space
+			{
+				
+				tmp = (char*)realloc_memory((unsigned char*)threadParams->write_buf, send_buf_size, send_buf_size+BUFFER_SIZE);
 
-    close(threadParams->client_fd);
+				if(tmp == NULL)
+				{
+					printf("writeBuf realloc failed\n");
+                                         rc = false;
+					break;
+				}            
+				else
+				{
+				        send_buf_size += BUFFER_SIZE;
+					threadParams->write_buf = tmp;
+				}
+			}
+        
+			threadParams->write_buf[packet_size++] = byte_content;
+        
+			if(byte_content == '\n')    // read in newline, send the packet
+			{   
+				// Block signals to avoid partial send
+				if(sigprocmask(SIG_BLOCK, &(threadParams->mask), NULL) == -1)
+				{
+					printf("failed blocking signal\n");
+    				break;
+				}
+        
+				ssize_t send_bytes = send(threadParams->client_fd, threadParams->write_buf, packet_size, 0);
+            
+				if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
+				{
+					perror("\nERROR sigprocmask():");
+					break;
+				}
+            
+				if(send_bytes == -1)
+				{
+					printf("send() failed\n");
+					break;
+				}
+            
+				packet_size = 0;
+			}
+		}
+	}
+    
 
-    free(threadParams->read_buf);
-    free(threadParams->write_buf);
+	// single point exit, clean up
+
+	if(threadParams->read_buf)
+	{
+		free(threadParams->read_buf);
+	}
+
+	if(threadParams->write_buf)
+	{
+		free(threadParams->write_buf);
+	}
+
+    	pthread_mutex_unlock(&locker);
+
+    	close(threadParams->client_fd);
+
+    	threadParams->is_completed = rc;
     
-    threadParams->is_completed = true;
-    
-    pthread_exit(threadParams);
+    	pthread_exit(threadParams);
 }
 
 
@@ -533,4 +566,22 @@ void sig_handler(int signo)
         shutdown(server_fd, SHUT_RDWR);
         shut_down_flag = true;
     }
+}
+
+
+// return null if reallocation failed
+// otherwise return pointer to new allocated memory of new_size
+// old size bytes of the buf is copied into new allocated memory
+// and the old buf is freed
+unsigned char* realloc_memory(const unsigned char* buf, int old_size, int new_size)
+{
+    unsigned char* tmp = (unsigned char*)malloc(new_size);    // allocate new memory
+    
+    if(tmp != NULL)
+    {
+        memcpy(tmp, buf, old_size);
+        free((unsigned char*)buf);
+    }
+    
+    return tmp;
 }
