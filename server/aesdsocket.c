@@ -320,7 +320,7 @@ int main(int argc, char *argv[])
     close(client_fd);
     close(server_fd);
     timer_delete(timerid);
-    remove(OUTPUT_FILE);
+    //remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
