@@ -216,8 +216,8 @@ int main(int argc, char *argv[])
         chdir("/");
         
         close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
+        //close(STDOUT_FILENO);
+        //close(STDERR_FILENO);
     }
 
     
@@ -316,7 +316,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
-    remove(OUTPUT_FILE);
+    //remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
