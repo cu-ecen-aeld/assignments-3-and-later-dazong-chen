@@ -105,6 +105,54 @@ int main(int argc, char *argv[])
     int            thread_id = 1;
     char           buf[BUFFER_SIZE];
 
+
+    if(argc == 2)
+    {
+        if(strcmp(argv[1], "-d") == 0)
+        {
+            daemon_flag = true;
+        }
+    }
+    
+    
+    if(daemon_flag == true)
+    {
+        pid = fork();
+    
+        if(pid < 0)
+        {
+            perror("fork failed\n");
+            return -1;
+        }
+    
+        else if(pid > 0)
+        {
+    	    printf("parent of pid = %d\n", pid);
+    	    exit(0);
+        }
+        
+        else
+        {
+            printf("child process created\n");
+        }
+        
+        if(setsid() == -1)
+        {
+            printf("failed create new session\n");
+            return -1;
+        }
+        
+        // change to root
+        chdir("/");
+        
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+    }
+    
+    
+    
+
     memset(buf, 0, sizeof(buf));
     
     slist_data_t *datap = NULL;
@@ -128,13 +176,7 @@ int main(int argc, char *argv[])
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGTERM);
     
-    if(argc == 2)
-    {
-        if(strcmp(argv[1], "-d") == 0)
-        {
-            daemon_flag = true;
-        }
-    }
+    
     
     server_fd = socket(PF_INET, SOCK_STREAM, 0);
     
@@ -177,7 +219,7 @@ int main(int argc, char *argv[])
     }
     
     
-    
+    /*
     if(daemon_flag == true)
     {
         pid = fork();
@@ -212,7 +254,7 @@ int main(int argc, char *argv[])
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
     }
-
+*/
     // create output file
     fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
