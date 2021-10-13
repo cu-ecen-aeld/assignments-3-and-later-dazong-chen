@@ -536,9 +536,12 @@ static void timer_thread(union sigval sigval)
     time(&time_now);
     time_info = localtime(&time_now);
     size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
+    int timer_fd;
+    
+    timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
     pthread_mutex_lock(&locker);
-    ssize_t write_bytes = write(td->fd, buf, nbytes);
+    ssize_t write_bytes = write(timer_fd, buf, nbytes);
     
     if(write_bytes == -1)
     {
@@ -547,6 +550,7 @@ static void timer_thread(union sigval sigval)
     }
     
     pthread_mutex_unlock(&locker);
+    close(timer_fd);
 }
 
 
