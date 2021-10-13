@@ -531,7 +531,7 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
-    timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
+    //timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     //char buf[BUFFER_SIZE];
     //time_t time_now;
     //struct tm *time_info;
@@ -543,7 +543,7 @@ static void timer_thread(union sigval sigval)
     timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
     pthread_mutex_lock(&locker);
-    //ssize_t write_bytes = write(td->fd, "buf\n", 4);  // td->fd
+    ssize_t write_bytes = write(timer_fd, "buf\n", 4);  // td->fd
     
     if(write_bytes == -1)
     {
