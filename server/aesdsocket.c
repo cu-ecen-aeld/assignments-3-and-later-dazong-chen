@@ -190,44 +190,6 @@ int main(int argc, char *argv[])
     
     
     
-    struct sigevent    sev;
-    timer_data_t       td;
-    td.fd = fd;
-    
-    //Setup a call to timer_thread passing in the td structure as the sigev_value argument
-    sev.sigev_notify = SIGEV_THREAD;
-    sev.sigev_value.sival_ptr = &td;
-    sev.sigev_notify_function = timer_thread;
-    
-    struct timespec     start_time;
-    timer_t             timerid;
-    
-    if ( timer_create(clock_id, &sev, &timerid) != 0 )
-    {
-        printf("Error %d (%s) creating timer!\n",errno,strerror(errno));
-    }
-    
-    
-    
-    if ( clock_gettime(clock_id, &start_time) != 0 ) 
-    {
-        printf("Error %d (%s) getting clock %d time\n", errno, strerror(errno), clock_id);
-    }
-    
-    struct itimerspec itimerspec;
-    itimerspec.it_interval.tv_sec = 10;
-    itimerspec.it_interval.tv_nsec = 0;
-    
-    timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
-    
-    if( timer_settime(timerid, TIMER_ABSTIME, &itimerspec, NULL ) != 0 ) 
-    {
-        printf("Error %d (%s) setting timer\n",errno,strerror(errno));
-    }
-    
-    
-    
-    
     
     if(daemon_flag == true)
     {
