@@ -220,7 +220,8 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
 
-    
+    if((daemon_flag == false) || (pid == 0))
+    {
     struct sigevent    sev;
     timer_data_t       td;
     td.fd = fd;
@@ -248,18 +249,17 @@ int main(int argc, char *argv[])
     }
     
     struct itimerspec itimerspec;
-    
     itimerspec.it_interval.tv_sec = 10;
     itimerspec.it_interval.tv_nsec = 0;
-    itimerspec.it_value.tv_sec = 10;
-    itimerspec.it_value.tv_sec = 0;
+    //itimerspec.it_value.tv_sec = 10;
+    //itimerspec.it_value.tv_nsec = 0;
     timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
     
     if( timer_settime(timerid, TIMER_ABSTIME, &itimerspec, NULL ) != 0 ) 
     {
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
-    
+    }
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
     
@@ -537,13 +537,11 @@ static void timer_thread(union sigval sigval)
     //struct tm *time_info;
     //time(&time_now);
     //time_info = localtime(&time_now);
-    //size_t nbytes = strftime(buf,100,"--------->timestamp:%a, %d %b %Y %T %z\n",time_info);
-    int timer_fd;
-    
-    timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    //size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
+    int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
     pthread_mutex_lock(&locker);
-    ssize_t write_bytes = write(timer_fd, "buf\n", 4);  // td->fd
+    ssize_t write_bytes = write(timer_fd, "buf\n", 4);
     
     if(write_bytes == -1)
     {
