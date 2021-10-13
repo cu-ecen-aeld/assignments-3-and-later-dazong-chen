@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
-    remove(OUTPUT_FILE);
+    //remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
