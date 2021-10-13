@@ -94,7 +94,7 @@ int                   server_fd;
 int                   client_fd;
 int                   fd;
 bool                  shut_down_flag = false;
-timer_t             timerid;
+
 
 int main(int argc, char *argv[])
 {
@@ -104,56 +104,6 @@ int main(int argc, char *argv[])
     sigset_t       mask;
     int            thread_id = 1;
     char           buf[BUFFER_SIZE];
-
-
-    if(argc == 2)
-    {
-        if(strcmp(argv[1], "-d") == 0)
-        {
-            daemon_flag = true;
-        }
-    }
-    
-    
-    if(daemon_flag == true)
-    {
-        pid = fork();
-    
-        if(pid < 0)
-        {
-            perror("fork failed\n");
-            return -1;
-        }
-    
-        else if(pid > 0)
-        {
-    	    printf("parent of pid = %d\n", pid);
-    	    exit(0);
-        }
-        
-        else
-        {
-            printf("child process created\n");
-        }
-        
-        if(setsid() == -1)
-        {
-            printf("failed create new session\n");
-            return -1;
-        }
-        
-        // change to root
-        chdir("/");
-        
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
-    }
-    
-    // setup signal handler for SIGINT and SIGTERM
-    signal(SIGINT, sig_handler);
-    signal(SIGTERM, sig_handler);
-    
 
     memset(buf, 0, sizeof(buf));
     
@@ -169,14 +119,22 @@ int main(int argc, char *argv[])
     // setup syslog
     openlog(NULL, 0, LOG_USER);
     
-
+    // setup signal handler for SIGINT and SIGTERM
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
     
     // signals to be masked
     sigemptyset(&mask);
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGTERM);
     
-    
+    if(argc == 2)
+    {
+        if(strcmp(argv[1], "-d") == 0)
+        {
+            daemon_flag = true;
+        }
+    }
     
     server_fd = socket(PF_INET, SOCK_STREAM, 0);
     
@@ -218,8 +176,15 @@ int main(int argc, char *argv[])
     	return -1;
     }
     
+    // create output file
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
-    /*
+    if(fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        return -1;
+    }
+    
     if(daemon_flag == true)
     {
         pid = fork();
@@ -254,15 +219,7 @@ int main(int argc, char *argv[])
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
     }
-*/
-    // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-    
-    if(fd < 0)
-    {
-        syslog(LOG_ERR, "open() failed\n");
-        return -1;
-    }
+
     
     struct sigevent    sev;
     timer_data_t       td;
@@ -276,7 +233,7 @@ int main(int argc, char *argv[])
     sev.sigev_notify_function = timer_thread;
     
     struct timespec     start_time;
-    
+    timer_t             timerid;
     
     if ( timer_create(clock_id, &sev, &timerid) != 0 )
     {
@@ -293,8 +250,6 @@ int main(int argc, char *argv[])
     struct itimerspec itimerspec;
     itimerspec.it_interval.tv_sec = 10;
     itimerspec.it_interval.tv_nsec = 0;
-    itimerspec.it_value.tv_sec = 10;
-    itimerspec.it_value.tv_nsec = 10;
     
     timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
     
@@ -358,7 +313,10 @@ int main(int argc, char *argv[])
     }
     
 
-
+    close(fd);
+    close(client_fd);
+    close(server_fd);
+    remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
@@ -366,13 +324,6 @@ int main(int argc, char *argv[])
 	SLIST_REMOVE_HEAD(&head, entries);
 	free(datap);
     }
-    
-    close(fd);
-    close(client_fd);
-    close(server_fd);
-    pthread_mutex_destroy(&locker);
-    timer_delete(timerid);
-    remove(OUTPUT_FILE);
     
     return 0;
 }
