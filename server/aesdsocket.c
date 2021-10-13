@@ -188,9 +188,7 @@ int main(int argc, char *argv[])
         return -1;
     }
     
-    
-    
-    
+
     if(daemon_flag == true)
     {
         pid = fork();
@@ -535,7 +533,7 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
-    /*
+    
     timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
@@ -552,10 +550,10 @@ static void timer_thread(union sigval sigval)
         perror("timer_thread write() failed\n");
         exit(-1);
     }
-    */
-    int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-    pthread_mutex_lock(&locker);
-    ssize_t write_bytes = write(timer_fd, "buf\n", 4);
+    
+    //int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    //pthread_mutex_lock(&locker);
+    write_bytes = write(td->fd, "buf\n", 4);
     pthread_mutex_unlock(&locker);
 }
 
