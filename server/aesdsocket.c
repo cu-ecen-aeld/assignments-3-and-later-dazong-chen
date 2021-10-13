@@ -38,8 +38,6 @@
 
 
 
-
-
 typedef struct
 {
     pthread_t     thread;
@@ -52,6 +50,7 @@ typedef struct
     bool          is_completed;
 
 }threadParams_t;
+
 
 typedef struct slist_data_s   slist_data_t;
 struct slist_data_s
@@ -86,32 +85,63 @@ void* send_receive_packet(void* threadp);
 void sig_handler(int signo);
 void* get_in_addr(struct sockaddr *sa);
 static void timer_thread(union sigval sigval);
+char* find_newline(const int fd, int* nbytes_in_line);
 
-pthread_mutex_t locker = PTHREAD_MUTEX_INITIALIZER;
-struct sockaddr_in    server_addr;
-struct sockaddr_in    client_addr;
+// global variables
+pthread_mutex_t       locker = PTHREAD_MUTEX_INITIALIZER;
 int                   server_fd;
-int                   client_fd;
-int                   fd;
 bool                  shut_down_flag = false;
 
 
 int main(int argc, char *argv[])
 {
-    pid_t          pid = 0;
-    bool           daemon_flag = false;
-    socklen_t      addr_size;
-    sigset_t       mask;
-    int            thread_id = 1;
-    char           buf[BUFFER_SIZE];
-
+    // socket related variables
+    struct sockaddr_in      client_addr;
+    socklen_t               addr_size;
+    int                     client_fd;
+    struct sockaddr_in      server_addr;
+    
+    
+    // files related variables
+    char                buf[BUFFER_SIZE];
+    int                 fd;
+    
+    // this variable is used for focefully binding to port 9000
+    int                 option = 1;
+    
+    
+    // daemon related variables
+    pid_t               pid = 0;
+    bool                daemon_flag = false;
+    
+    
+    // timer related variables
+    int                 clock_id = CLOCK_MONOTONIC;
+    struct timespec     start_time;
+    timer_t             timerid;
+    struct itimerspec   itimerspec;
+    
+    
+    // timer thread related variables
+    struct sigevent     sev;
+    timer_data_t        td;
+    
+    
+    // send_receive_packet related variables
+    int                 thread_id = 1;
+    
+    // single lined-list related variables
+    slist_data_t        *datap = NULL;
+    
+    
+    // signal related variables
+    sigset_t            mask;
+    
+    
     memset(buf, 0, sizeof(buf));
     
-    slist_data_t *datap = NULL;
     
-
-    int clock_id = CLOCK_MONOTONIC;
-    
+   
     SLIST_HEAD(slisthead, slist_data_s) head;
     SLIST_INIT(&head);
 
@@ -144,7 +174,7 @@ int main(int argc, char *argv[])
     	return -1;
     }
     
-    int option = 1;
+    
     
     // attaching socket to the port 9000 to avoid bind error
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &option, sizeof(option)) == -1)
@@ -220,8 +250,7 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
 
-    struct sigevent    sev;
-    timer_data_t       td;
+    
     td.fd = fd;
     /**
     * Setup a call to timer_thread passing in the td structure as the sigev_value
@@ -231,8 +260,7 @@ int main(int argc, char *argv[])
     sev.sigev_value.sival_ptr = &td;
     sev.sigev_notify_function = timer_thread;
     
-    struct timespec     start_time;
-    timer_t             timerid;
+    
     
     if ( timer_create(clock_id, &sev, &timerid) != 0 )
     {
@@ -246,11 +274,12 @@ int main(int argc, char *argv[])
         printf("Error %d (%s) getting clock %d time\n", errno, strerror(errno), clock_id);
     }
     
-    struct itimerspec itimerspec;
+    
     itimerspec.it_interval.tv_sec = 10;
     itimerspec.it_interval.tv_nsec = 0;
     //itimerspec.it_value.tv_sec = 10;
     //itimerspec.it_value.tv_nsec = 0;
+    
     timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
     
     if( timer_settime(timerid, TIMER_ABSTIME, &itimerspec, NULL ) != 0 ) 
@@ -316,7 +345,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
-    //remove(OUTPUT_FILE);
+    remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
@@ -345,14 +374,14 @@ void* send_receive_packet(void* threadp)
 {
     threadParams_t        *threadParams = (threadParams_t *)threadp;
     int                   current_in_buf_bytes = 0;   // overwrite content buf
-    int                   received_bytes = 0;
+    
     char*                 tmp = NULL;
-    int                   content_buf_size = BUFFER_SIZE;
-    bool                  newline_flag = false;
+    int received_bytes = 0;
+    
     char                  buf[BUFFER_SIZE];
     bool                  rc = true;
-    
-    
+    bool                  newline_flag = false;
+    int                   content_buf_size = BUFFER_SIZE;
  
     if(sigprocmask(SIG_BLOCK, &threadParams->mask, NULL) == -1)
     {
@@ -363,7 +392,7 @@ void* send_receive_packet(void* threadp)
 		
     if( NULL == (threadParams->read_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE)) )
     {
-        printf("failed to allocate read buffer\n");
+        printf("failed to allocate write buffer\n");
     	exit(-1);
     }
 
@@ -372,9 +401,11 @@ void* send_receive_packet(void* threadp)
         printf("failed to allocate write buffer\n");
     	exit(-1);
     }
-
-
-	// both read/write buffers are allocated
+    
+    
+    //threadParams->read_buf = find_newline(threadParams->fd, &current_in_buf_bytes);
+    
+    // both read/write buffers are allocated
     
     do	// receive a line
     {
@@ -530,16 +561,15 @@ void* send_receive_packet(void* threadp)
 static void timer_thread(union sigval sigval)
 {
     timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
-    //char buf[BUFFER_SIZE];
-    //time_t time_now;
-    //struct tm *time_info;
-    //time(&time_now);
-    //time_info = localtime(&time_now);
-    //size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
-    //int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    char buf[BUFFER_SIZE];
+    time_t time_now;
+    struct tm *time_info;
+    time(&time_now);
+    time_info = localtime(&time_now);
+    size_t nbytes = strftime(buf, BUFFER_SIZE, "timestamp:%Y %b %a %d %H:%M:%S%n", time_info);
     
     pthread_mutex_lock(&locker);
-    ssize_t write_bytes = write(td->fd, "buf\n", 4);
+    ssize_t write_bytes = write(td->fd, buf, nbytes);
     
     if(write_bytes == -1)
     {
@@ -578,3 +608,78 @@ unsigned char* realloc_memory(const unsigned char* buf, int old_size, int new_si
     
     return tmp;
 }
+
+
+/**************************************************
+* this function contains malloc
+* Parameter:
+* fd: file descriptor
+* buf: buffer stored information of whole new line
+* size: nbytes
+* return:
+*       contents of a line and update how many byte in the line
+***************************************************/
+/*
+char* find_newline(const int fd, int* nbytes_in_line)
+{
+    int                   received_bytes = 0;
+    int                   content_buf_size = BUFFER_SIZE;
+    char*                 receive_buf = NULL;
+    char*                 tmp = NULL;
+    char                  buf[BUFFER_SIZE];
+    bool                  newline_flag = false;
+    
+    
+    
+    if( NULL == (receive_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE)) )
+    {
+        printf("failed to allocate read buffer\n");
+    	exit(-1);
+    }
+    
+    
+    do	// receive a line
+    {
+        received_bytes = recv(fd, buf, BUFFER_SIZE-1, 0);
+	    
+	if(received_bytes == -1)
+	{
+	    printf("recv failed\n");
+	    //rc = false;
+	    break;
+	}
+	
+	buf[received_bytes] = 0;     // bc strchr is tracing a string so need to set end of string
+	
+	if(strchr(buf, '\n') != NULL)
+	{
+	    newline_flag = true;
+	}
+	    
+	// check if malloced size is enough to hold new appended contents, otherwise realloc
+	if( (received_bytes + (*nbytes_in_line)) >= content_buf_size )
+	{
+	    tmp = (char*)realloc_memory((unsigned char*)receive_buf, content_buf_size, content_buf_size+BUFFER_SIZE);
+            
+            if(tmp == NULL)
+	    {
+	        printf("readBuf realloc failed\n");
+		//rc = false;
+		break;
+	    }            
+			
+	    else
+	    {
+	        content_buf_size += BUFFER_SIZE;
+		receive_buf = tmp;
+	    }
+	}
+	 
+	// append received bytes into read_buf
+	memcpy(receive_buf + (*nbytes_in_line), buf, received_bytes);    		 
+	*nbytes_in_line += received_bytes;
+    	
+    }while(!newline_flag);
+    
+    return receive_buf;
+}*/
