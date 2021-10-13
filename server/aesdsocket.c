@@ -53,7 +53,6 @@ typedef struct
 
 }threadParams_t;
 
-
 typedef struct slist_data_s   slist_data_t;
 struct slist_data_s
 {
@@ -105,8 +104,6 @@ int main(int argc, char *argv[])
     sigset_t       mask;
     int            thread_id = 1;
     char           buf[BUFFER_SIZE];
-
-
 
     memset(buf, 0, sizeof(buf));
     
@@ -188,7 +185,6 @@ int main(int argc, char *argv[])
         return -1;
     }
     
-
     if(daemon_flag == true)
     {
         pid = fork();
@@ -228,8 +224,10 @@ int main(int argc, char *argv[])
     struct sigevent    sev;
     timer_data_t       td;
     td.fd = fd;
-    
-    //Setup a call to timer_thread passing in the td structure as the sigev_value argument
+    /**
+    * Setup a call to timer_thread passing in the td structure as the sigev_value
+    * argument
+    */
     sev.sigev_notify = SIGEV_THREAD;
     sev.sigev_value.sival_ptr = &td;
     sev.sigev_notify_function = timer_thread;
@@ -259,8 +257,6 @@ int main(int argc, char *argv[])
     {
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
-    
-    
     
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
@@ -320,7 +316,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
-    //remove(OUTPUT_FILE);
+    remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
@@ -533,14 +529,15 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
-    
+    printf("inside timer thread\n");
+    exit(0);
     timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
     time(&time_now);
     time_info = localtime(&time_now);
-    size_t nbytes = strftime(buf,100,"---->timestamp:%a, %d %b %Y %T %z\n",time_info);
+    size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
     
     pthread_mutex_lock(&locker);
     ssize_t write_bytes = write(td->fd, buf, nbytes);
@@ -551,9 +548,6 @@ static void timer_thread(union sigval sigval)
         exit(-1);
     }
     
-    //int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
-    //pthread_mutex_lock(&locker);
-    //write_bytes = write(td->fd, "buf\n", 4);
     pthread_mutex_unlock(&locker);
 }
 
