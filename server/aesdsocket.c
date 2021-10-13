@@ -220,8 +220,6 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
 
-    if((daemon_flag == false) || (pid == 0))
-    {
     struct sigevent    sev;
     timer_data_t       td;
     td.fd = fd;
@@ -259,7 +257,7 @@ int main(int argc, char *argv[])
     {
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
-    }
+
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
     
@@ -531,17 +529,17 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
-    //timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
+    timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     //char buf[BUFFER_SIZE];
     //time_t time_now;
     //struct tm *time_info;
     //time(&time_now);
     //time_info = localtime(&time_now);
     //size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
-    int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    //int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
     pthread_mutex_lock(&locker);
-    ssize_t write_bytes = write(timer_fd, "buf\n", 4);
+    ssize_t write_bytes = write(td->fd, "buf\n", 4);
     
     if(write_bytes == -1)
     {
@@ -550,7 +548,7 @@ static void timer_thread(union sigval sigval)
     }
     
     pthread_mutex_unlock(&locker);
-    close(timer_fd);
+    //close(timer_fd);
 }
 
 
