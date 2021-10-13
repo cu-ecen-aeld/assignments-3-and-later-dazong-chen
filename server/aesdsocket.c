@@ -540,7 +540,7 @@ static void timer_thread(union sigval sigval)
     struct tm *time_info;
     time(&time_now);
     time_info = localtime(&time_now);
-    size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
+    size_t nbytes = strftime(buf,100,"---->timestamp:%a, %d %b %Y %T %z\n",time_info);
     
     pthread_mutex_lock(&locker);
     ssize_t write_bytes = write(td->fd, buf, nbytes);
