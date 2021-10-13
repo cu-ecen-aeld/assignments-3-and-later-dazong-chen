@@ -240,12 +240,16 @@ int main(int argc, char *argv[])
         printf("Error %d (%s) creating timer!\n",errno,strerror(errno));
     }
     
+    printf("timer_create\n");
+    
     
     
     if ( clock_gettime(clock_id, &start_time) != 0 ) 
     {
         printf("Error %d (%s) getting clock %d time\n", errno, strerror(errno), clock_id);
     }
+    printf("clock_gettime\n");
+    
     
     struct itimerspec itimerspec;
     itimerspec.it_interval.tv_sec = 10;
@@ -257,6 +261,8 @@ int main(int argc, char *argv[])
     {
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
+    
+    printf("timer_settime\n");
     
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
@@ -530,7 +536,7 @@ void* send_receive_packet(void* threadp)
 static void timer_thread(union sigval sigval)
 {
     printf("inside timer thread\n");
-    exit(0);
+    //exit(0);
     timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
