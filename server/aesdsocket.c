@@ -553,7 +553,7 @@ static void timer_thread(union sigval sigval)
     
     //int timer_fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     //pthread_mutex_lock(&locker);
-    write_bytes = write(td->fd, "buf\n", 4);
+    //write_bytes = write(td->fd, "buf\n", 4);
     pthread_mutex_unlock(&locker);
 }
 
