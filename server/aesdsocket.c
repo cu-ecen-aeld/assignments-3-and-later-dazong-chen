@@ -150,7 +150,9 @@ int main(int argc, char *argv[])
         close(STDERR_FILENO);
     }
     
-    
+    // setup signal handler for SIGINT and SIGTERM
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
     
 
     memset(buf, 0, sizeof(buf));
@@ -167,9 +169,7 @@ int main(int argc, char *argv[])
     // setup syslog
     openlog(NULL, 0, LOG_USER);
     
-    // setup signal handler for SIGINT and SIGTERM
-    signal(SIGINT, sig_handler);
-    signal(SIGTERM, sig_handler);
+
     
     // signals to be masked
     sigemptyset(&mask);
