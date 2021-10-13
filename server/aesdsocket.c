@@ -248,9 +248,11 @@ int main(int argc, char *argv[])
     }
     
     struct itimerspec itimerspec;
+    
     itimerspec.it_interval.tv_sec = 10;
     itimerspec.it_interval.tv_nsec = 0;
-    
+    itimerspec.it_value.tv_sec = 10;
+    itimerspec.it_value.tv_sec = 0;
     timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
     
     if( timer_settime(timerid, TIMER_ABSTIME, &itimerspec, NULL ) != 0 ) 
@@ -316,7 +318,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
-    remove(OUTPUT_FILE);
+    //remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
