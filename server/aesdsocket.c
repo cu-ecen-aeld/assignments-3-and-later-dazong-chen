@@ -222,18 +222,22 @@ int main(int argc, char *argv[])
 
     
     struct sigevent    sev;
-    timer_data_t       td;
-    td.fd = fd;
+    
+    memset(&sev,0,sizeof(struct sigevent));
+    
+    //timer_data_t       td;
+    //td.fd = fd;
     /**
     * Setup a call to timer_thread passing in the td structure as the sigev_value
     * argument
     */
     sev.sigev_notify = SIGEV_THREAD;
-    sev.sigev_value.sival_ptr = &td;
+    sev.sigev_value.sival_ptr = NULL;
     sev.sigev_notify_function = timer_thread;
     
     struct timespec     start_time;
     timer_t             timerid;
+    
     
     if ( timer_create(clock_id, &sev, &timerid) != 0 )
     {
@@ -242,7 +246,7 @@ int main(int argc, char *argv[])
     
     printf("timer_create\n");
     
-    
+    start_time.tv_sec += 10;
     
     if ( clock_gettime(clock_id, &start_time) != 0 ) 
     {
@@ -537,7 +541,7 @@ static void timer_thread(union sigval sigval)
 {
     printf("inside timer thread\n");
     //exit(0);
-    timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
+    /*timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
@@ -554,7 +558,7 @@ static void timer_thread(union sigval sigval)
         exit(-1);
     }
     
-    pthread_mutex_unlock(&locker);
+    pthread_mutex_unlock(&locker);*/
 }
 
 
