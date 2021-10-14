@@ -225,14 +225,14 @@ int main(int argc, char *argv[])
     
     memset(&sev,0,sizeof(struct sigevent));
     
-    //timer_data_t       td;
-    //td.fd = fd;
+    timer_data_t       td;
+    td.fd = fd;
     /**
     * Setup a call to timer_thread passing in the td structure as the sigev_value
     * argument
     */
     sev.sigev_notify = SIGEV_THREAD;
-    sev.sigev_value.sival_ptr = NULL;
+    sev.sigev_value.sival_ptr = &td;
     sev.sigev_notify_function = timer_thread;
     
     struct timespec     start_time;
@@ -540,19 +540,9 @@ void* send_receive_packet(void* threadp)
 static void timer_thread(union sigval sigval)
 {
     printf("hello hello\n");
+
     
-    int timer_fd = open("/var/tmp/cdz121.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
-    
-    if(timer_fd < 0)
-    {
-        syslog(LOG_ERR, "open() failed\n");
-        //return -1;
-    }
-    
-    write(timer_fd, "ABCD\n", 5);
-    
-    //exit(0);
-    /*timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
+    timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
@@ -569,8 +559,7 @@ static void timer_thread(union sigval sigval)
         exit(-1);
     }
     
-    pthread_mutex_unlock(&locker);*/
-    close(timer_fd);
+    pthread_mutex_unlock(&locker);
 }
 
 
