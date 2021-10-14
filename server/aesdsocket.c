@@ -215,9 +215,9 @@ int main(int argc, char *argv[])
         // change to root
         chdir("/");
         
-        //close(STDIN_FILENO);
-        //close(STDOUT_FILENO);
-        //close(STDERR_FILENO);
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
     }
 
     
@@ -326,7 +326,7 @@ int main(int argc, char *argv[])
     close(fd);
     close(client_fd);
     close(server_fd);
-    //remove(OUTPUT_FILE);
+    remove(OUTPUT_FILE);
 
     while (!SLIST_EMPTY(&head))
     {
@@ -539,19 +539,20 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
-    printf("hello hello\n");
-
-    
     timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
     struct tm *time_info;
     time(&time_now);
     time_info = localtime(&time_now);
+    
     size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
     
     pthread_mutex_lock(&locker);
+    
     ssize_t write_bytes = write(td->fd, buf, nbytes);
+    
+    pthread_mutex_unlock(&locker);
     
     if(write_bytes == -1)
     {
@@ -559,7 +560,7 @@ static void timer_thread(union sigval sigval)
         exit(-1);
     }
     
-    pthread_mutex_unlock(&locker);
+    
 }
 
 
