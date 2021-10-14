@@ -540,6 +540,17 @@ void* send_receive_packet(void* threadp)
 static void timer_thread(union sigval sigval)
 {
     printf("hello hello\n");
+    
+    int timer_fd = open("/var/tmp/cdz121.txt", O_RDWR | O_CREAT | O_APPEND, 0644);
+    
+    if(timer_fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        //return -1;
+    }
+    
+    write(timer_fd, "ABCD\n", 5);
+    
     //exit(0);
     /*timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
@@ -559,6 +570,7 @@ static void timer_thread(union sigval sigval)
     }
     
     pthread_mutex_unlock(&locker);*/
+    close(timer_fd);
 }
 
 
