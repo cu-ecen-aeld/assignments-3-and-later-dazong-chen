@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
         // change to root
         chdir("/");
         
-        close(STDIN_FILENO);
+        //close(STDIN_FILENO);
         //close(STDOUT_FILENO);
         //close(STDERR_FILENO);
     }
@@ -539,7 +539,7 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
-    printf("inside timer thread\n");
+    printf("hello hello\n");
     //exit(0);
     /*timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
