@@ -46,7 +46,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
     }
     
     
-    while(position != buffer->in_offs)    // search through the circular buffer
+    do   // search through the circular buffer
     {
         if(char_offset > cur_total_size)
         {
@@ -63,7 +63,7 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
         position = (position+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;  // next entry[i]
         prev_total_size += buffer->entry[position].size;
         
-    }
+    }while(position != buffer->in_offs) 
     
     
     return NULL;    // searched through whole buffer, char offset is greater than total size of buffer string
