@@ -1,0 +1,221 @@
+starting test with SKIP_BUILD="" and DO_VALIDATE=""
+Running test with user dazong
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment1/Test_hello.c:6:test_hello:INFO: Hello!  Your unity setup is working!
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment1/Test_hello.c:4:test_hello:PASS
+
+-----------------------
+1 Tests 0 Failures 0 Ignored 
+OK
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment1/Test_assignment_validate.c:9:test_assignment_validate:PASS
+
+-----------------------
+1 Tests 0 Failures 0 Ignored 
+OK
+Start a thread obtaining a locked mutex, sleeping 1 millisecond before locking and waiting to return
+until 1 millisecond after locking.
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment4/Test_threading.c:86:test_threading_single_locked_mutex:PASS
+Start a thread which waits 250ms before attempting to obtain a mutex, then waits
+250ms to release.  Since we aren't locking the mutex in this case, the thread
+should not block on mutex_lock()
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment4/Test_threading.c:112:test_threading_single_unlocked_mutex:PASS
+Setting up thread 1
+Start a thread obtaining a locked mutex, sleeping 1 millisecond before locking and waiting to return
+until 1 millisecond after locking.
+Setting up thread 2
+Start a thread obtaining a locked mutex, sleeping 1 millisecond before locking and waiting to return
+until 1 millisecond after locking.
+Verifying thread 1
+Verifying thread 2
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment4/Test_threading.c:160:test_threading_two_threads_two_mutexes:PASS
+Setting up thread 1
+Start a thread obtaining a locked mutex, sleeping 1 millisecond before locking and waiting to return
+until 1 millisecond after locking.
+Setting up thread 2
+Start a thread obtaining a locked mutex, sleeping 1 millisecond before locking and waiting to return
+until 1 millisecond after locking, using the same mutex as thread 1
+Verifying thread 1
+Verifying thread 2 (which uses the same mutex as thread 1 and should not require unlock)
+/home/dazong/Desktop/AESD/assignment-4-dazong-chen/assignment-autotest/test/assignment4/Test_threading.c:197:test_threading_two_threads_one_mutex:PASS
+
+-----------------------
+4 Tests 0 Failures 0 Ignored 
+OK
+Executing assignment test script
+~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+~/Desktop/AESD/assignment-6-part1/server ~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+rm -f aesdsocket *.o
+gcc -g -Wall -Werror -c aesdsocket.c -lrt -pthread
+gcc -g -Wall -Werror -o aesdsocket aesdsocket.o -lrt -pthread
+Done with binding
+parent of pid = 14988
+~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1/server ~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+Testing target localhost on port 9000
+sending string abcdefg
+Differences found after sending abcdefg to localhost on port 9000
+Expected contents to match:
+abcdefg
+But found contents:
+timestamp:wait-for-startup
+abcdefg
+hijklmnop
+1234567890
+9876543210
+One best book is equal to a hundred good friends, but one good friend is equal to a library
+If you want to shine like a sun, first burn like a sun
+Never stop fighting until you arrive at your destined place - that is, the unique you
+One best book is equal to a hundred good friends, but one good friend is equal to a library
+If you want to shine like a sun, first burn like a sun
+Never stop fighting until you arrive at your destined place - that is, the unique you
+One best book is equal to a hundred good friends, but one good friend is equal to a library
+If you want to shine like a sun, first burn like a sun
+Never stop fighting until you arrive at your destined place - that is, the unique you
+validate_multithreaded
+test_socket_timer
+timestamp:Mon, 11 Oct 2021 20:44:24 -0600
+timestamp:Mon, 11 Oct 2021 20:44:34 -0600
+test_socket_timer
+timestamp:Mon, 11 Oct 2021 20:44:44 -0600
+timestamp:Mon, 11 Oct 2021 20:44:54 -0600
+timestamp:Mon, 11 Oct 2021 20:45:04 -0600
+timestamp:Mon, 11 Oct 2021 20:45:14 -0600
+timestamp:Mon, 11 Oct 2021 20:45:24 -0600
+timestamp:Mon, 11 Oct 2021 20:45:34 -0600
+abcdefg
+With differences
+--- /tmp/fileVpoN6b	2021-10-11 20:45:37.139908892 -0600
++++ /tmp/fileIDMIp4	2021-10-11 20:45:37.139908892 -0600
+@@ -1 +1,26 @@
++timestamp:wait-for-startup
++abcdefg
++hijklmnop
++1234567890
++9876543210
++One best book is equal to a hundred good friends, but one good friend is equal to a library
++If you want to shine like a sun, first burn like a sun
++Never stop fighting until you arrive at your destined place - that is, the unique you
++One best book is equal to a hundred good friends, but one good friend is equal to a library
++If you want to shine like a sun, first burn like a sun
++Never stop fighting until you arrive at your destined place - that is, the unique you
++One best book is equal to a hundred good friends, but one good friend is equal to a library
++If you want to shine like a sun, first burn like a sun
++Never stop fighting until you arrive at your destined place - that is, the unique you
++validate_multithreaded
++test_socket_timer
++timestamp:Mon, 11 Oct 2021 20:44:24 -0600
++timestamp:Mon, 11 Oct 2021 20:44:34 -0600
++test_socket_timer
++timestamp:Mon, 11 Oct 2021 20:44:44 -0600
++timestamp:Mon, 11 Oct 2021 20:44:54 -0600
++timestamp:Mon, 11 Oct 2021 20:45:04 -0600
++timestamp:Mon, 11 Oct 2021 20:45:14 -0600
++timestamp:Mon, 11 Oct 2021 20:45:24 -0600
++timestamp:Mon, 11 Oct 2021 20:45:34 -0600
+ abcdefg
+Test complete with failure. Make sure you have restarted the socket server before starting this script
+[0;31mValidation Error:sockettest.sh returned 1 attempting to run against native compiled aesdsocket instance[0m
+~/Desktop/AESD/assignment-6-part1/server ~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+Waiting for aesdsocket application with pid 14813
+14988 to terminate
+Re-running sockettest.sh with valgrind
+~/Desktop/AESD/assignment-6-part1/server ~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1/server ~/Desktop/AESD/assignment-6-part1/assignment-autotest/test/assignment6 ~/Desktop/AESD/assignment-6-part1
+Starting valgrind
+Valgrind and aesdsocket complete
+[0;31mValidation Error:Valgrind failed with 127[0m
+Valgrind output error log:
+deleting marker file /tmp/tmp.pQsofupCr6
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start
+Waiting for aesdsocket application to start

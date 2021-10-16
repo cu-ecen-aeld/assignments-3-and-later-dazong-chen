@@ -4,6 +4,8 @@
 * Reference: 
 * https://beej.us/guide/bgnet/html/
 * http://www.microhowto.info/howto/cause_a_process_to_become_a_daemon_in_c.html
+* https://github.com/cu-ecen-aeld/aesd-lectures/blob/master/lecture9/timer_thread.c
+* https://github.com/stockrt/queue.h/blob/master/sample.c
 ***********************************************************/
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,24 +25,75 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <sys/queue.h>
+#include <pthread.h>
+#include <time.h>
+
 
 
 #define       PORT                   9000       // the port users will be connecting to
 #define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
-#define       MAX_CONNECTION         4         // maximum length to which the queue of pending connections for sockfd may grow.
+#define       MAX_CONNECTION         10         // number of connections to which the queue of pending connections for sockfd may grow.
 #define       BUFFER_SIZE            500
 
 
-void *get_in_addr(struct sockaddr *sa);
-void termination_handler();
 
+
+
+typedef struct
+{
+    pthread_t     thread;
+    int           thread_id;
+    int           client_fd;
+    int           fd;
+    char*         read_buf;
+    char*         write_buf;
+    sigset_t      mask;
+    bool          is_completed;
+
+}threadParams_t;
+
+typedef struct slist_data_s   slist_data_t;
+struct slist_data_s
+{
+
+    threadParams_t threadParams;
+    SLIST_ENTRY(slist_data_s) entries;
+};
+
+
+typedef struct
+{
+    int fd;
+    
+}timer_data_t;
+
+
+static inline void timespec_add( struct timespec *result,
+                        const struct timespec *ts_1, const struct timespec *ts_2)
+{
+    result->tv_sec = ts_1->tv_sec + ts_2->tv_sec;
+    result->tv_nsec = ts_1->tv_nsec + ts_2->tv_nsec;
+    if( result->tv_nsec > 1000000000L ) 
+    {
+        result->tv_nsec -= 1000000000L;
+        result->tv_sec ++;
+    }
+}
+
+unsigned char* realloc_memory(const unsigned char* buf, int old_size, int new_size);
+void* send_receive_packet(void* threadp);
+void sig_handler(int signo);
+void* get_in_addr(struct sockaddr *sa);
+static void timer_thread(union sigval sigval);
+
+pthread_mutex_t locker = PTHREAD_MUTEX_INITIALIZER;
 struct sockaddr_in    server_addr;
 struct sockaddr_in    client_addr;
 int                   server_fd;
 int                   client_fd;
 int                   fd;
-char* content_buf = NULL;
-char* content_buf2 = NULL;
+bool                  shut_down_flag = false;
 
 
 int main(int argc, char *argv[])
@@ -49,20 +102,26 @@ int main(int argc, char *argv[])
     bool           daemon_flag = false;
     socklen_t      addr_size;
     sigset_t       mask;
-    
-    int received_bytes = 0;
-    int current_in_buf_bytes = 0;
-    char buf[BUFFER_SIZE];
-    int content_buf_size = BUFFER_SIZE;
-    char *tmp = NULL;
-    memset(buf, 0, sizeof(buf));
+    int            thread_id = 1;
+    char           buf[BUFFER_SIZE];
 
+    memset(buf, 0, sizeof(buf));
+    
+    slist_data_t *datap = NULL;
+    
+
+    int clock_id = CLOCK_MONOTONIC;
+    
+    SLIST_HEAD(slisthead, slist_data_s) head;
+    SLIST_INIT(&head);
+
+    
     // setup syslog
     openlog(NULL, 0, LOG_USER);
     
     // setup signal handler for SIGINT and SIGTERM
-    signal(SIGINT, termination_handler);
-    signal(SIGTERM, termination_handler);
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
     
     // signals to be masked
     sigemptyset(&mask);
@@ -78,10 +137,20 @@ int main(int argc, char *argv[])
     }
     
     server_fd = socket(PF_INET, SOCK_STREAM, 0);
+    
     if(server_fd == -1)
     {
     	perror("Socket is not created successfully\n");
     	return -1;
+    }
+    
+    int option = 1;
+    
+    // attaching socket to the port 9000 to avoid bind error
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &option, sizeof(option)) == -1)
+    {
+        perror("setsockopt failed");
+       	exit(-1);
     }
     
     server_addr.sin_family = AF_INET;
@@ -95,7 +164,26 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    printf("Done with binding\n");
+    else
+    {
+        printf("Done with binding\n");
+    }
+    
+    
+    if(listen(server_fd, MAX_CONNECTION) == -1)
+    {
+    	perror("Server listen failed\n");
+    	return -1;
+    }
+    
+    // create output file
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    
+    if(fd < 0)
+    {
+        syslog(LOG_ERR, "open() failed\n");
+        return -1;
+    }
     
     if(daemon_flag == true)
     {
@@ -131,140 +219,128 @@ int main(int argc, char *argv[])
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
     }
+
     
-    if(listen(server_fd, MAX_CONNECTION)<0)
+    struct sigevent    sev;
+    
+    memset(&sev,0,sizeof(struct sigevent));
+    
+    timer_data_t       td;
+    td.fd = fd;
+    /**
+    * Setup a call to timer_thread passing in the td structure as the sigev_value
+    * argument
+    */
+    sev.sigev_notify = SIGEV_THREAD;
+    sev.sigev_value.sival_ptr = &td;
+    sev.sigev_notify_function = timer_thread;
+    
+    struct timespec     start_time;
+    timer_t             timerid;
+    
+    
+    if ( timer_create(clock_id, &sev, &timerid) != 0 )
     {
-    	perror("Server listen failed\n");
-    	return -1;
+        printf("Error %d (%s) creating timer!\n",errno,strerror(errno));
     }
     
-    // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    printf("timer_create\n");
     
-    if(fd < 0)
+    start_time.tv_sec += 10;
+    
+    if ( clock_gettime(clock_id, &start_time) != 0 ) 
     {
-        syslog(LOG_ERR, "open() failed\n");
-        return -1;
+        printf("Error %d (%s) getting clock %d time\n", errno, strerror(errno), clock_id);
+    }
+    printf("clock_gettime\n");
+    
+    
+    struct itimerspec itimerspec;
+    itimerspec.it_interval.tv_sec = 10;
+    itimerspec.it_interval.tv_nsec = 0;
+    
+    timespec_add(&itimerspec.it_value,&start_time,&itimerspec.it_interval);
+    
+    if( timer_settime(timerid, TIMER_ABSTIME, &itimerspec, NULL ) != 0 ) 
+    {
+        printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
     
-    content_buf = (char*)malloc(sizeof(char) * content_buf_size);
-    content_buf2 = (char*)malloc(sizeof(char) * content_buf_size);
+    printf("timer_settime\n");
     
+    addr_size = sizeof(struct sockaddr);
+    memset(&client_addr, 0, addr_size);
     
-    while(1)
+    while(!shut_down_flag)
     {
+        
         client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_size);
         
         if(client_fd == -1)
     	{
     	    perror("socket is not accepting successfully\n");
-    	    return -1;
+    	    printf("socket is not accepting successfully\n");
+    	    break;
+    	    //return -1;
     	}
+        
+        if(shut_down_flag == true)
+        {
+            break;
+        }
+        
+        
     	else
     	{
     	    char client_ip6[INET6_ADDRSTRLEN]; // space to hold the IPv6 string
     	    inet_ntop(AF_INET, get_in_addr((struct sockaddr*)&client_addr), client_ip6, sizeof client_ip6);
     	    syslog(LOG_DEBUG, "Accepted connection from %s", client_ip6);
-    	}
-    	
-    	// stop receiving signal while receiving/sending data
-    	if(sigprocmask(SIG_BLOCK, &mask, NULL) == -1)
-    	{
-    	    printf("failed blocking signal\n");
-    	} 
-    	
-    	bool newline_flag = false;
-    	
-    	current_in_buf_bytes = 0;   // overwrite content buf
-    	
-    	do	// read a line
-    	{
+    	    printf("Accepted connection from %s\n", client_ip6);
     	    
-    	    received_bytes = recv(client_fd, buf, BUFFER_SIZE, 0);
+    	    // create new thread
+    	    datap = malloc(sizeof(slist_data_t));
+    	    datap->threadParams.thread_id = thread_id;
+    	    datap->threadParams.client_fd = client_fd;
+    	    datap->threadParams.fd = fd;
+    	    datap->threadParams.mask = mask;
+    	    datap->threadParams.is_completed = false;
     	    
-    	    //printf("buf %s",buf);
+    	    thread_id++;
     	    
-    	    if(received_bytes == -1)
+    	    SLIST_INSERT_HEAD(&head, datap, entries);
+    	    
+    	    pthread_create(&(datap->threadParams.thread), NULL, send_receive_packet,(void*)&(datap->threadParams));
+    	    
+    	    SLIST_FOREACH(datap, &head, entries)
     	    {
-    	        printf("recv failed\n");
+    	        if((datap->threadParams).is_completed == true)
+	        {
+              	     pthread_join((datap->threadParams).thread, NULL);	
+		}
+    	    
     	    }
-    	    
-    	    if(strchr(buf, '\n') != NULL)
-    	    {
-    	        newline_flag = true;
-    	    }
-    	    
-    	    // check if malloced size is enough to hold new appended contents, otherwise realloc
-    	    if( (received_bytes + current_in_buf_bytes) >= content_buf_size )
-    	    {
-    	        content_buf_size += BUFFER_SIZE;
-    	        
-    	        tmp = (char*)realloc(content_buf, sizeof(char) * content_buf_size);
-    	    
-    	        if(tmp != NULL)
-    	        {
-    	            content_buf = tmp;
-    	        }
-    	    }
-    	    
-    	    memcpy(content_buf+current_in_buf_bytes, buf, received_bytes);
-    	    
-    	    current_in_buf_bytes += received_bytes;
-
-    	    	
-    	}while(!newline_flag);
-        
-        
-    	ssize_t write_bytes = write(fd, content_buf, current_in_buf_bytes);
-    	
-    	//printf("write bytes %ld\n", write_bytes);
-    	
-    	if(write_bytes != current_in_buf_bytes)
-    	{
-    	    printf("not completely written\n");
     	}
-    	
-    	off_t size = lseek(fd, 0, SEEK_CUR);   // file size
-    	
-    	//printf("size = %d\n", size);
-    	
-    	tmp = realloc(content_buf2, sizeof(char) * size);
-    	
-    	if(tmp != NULL)
-        {
-            content_buf2 = tmp;
-        }
-    	
-    	lseek(fd, 0, SEEK_SET);
-    	ssize_t read_bytes = read(fd, content_buf2, size);
-    	
-    	
-    	if(read_bytes == -1)
-    	{
-    	    printf("read failed\n");
-    	}
-    	
-    	ssize_t send_bytes = send(client_fd, content_buf2, read_bytes, 0);
-    	if(send_bytes == -1)
-    	{
-    	    printf("send failed\n");
-    	}
-    	
-    	
-    	// Unmask signals after receive/send
-    	if(sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1)
-    	{
-    	    printf("failed blocking signal\n");
-    	} 
-
-    	close(client_fd);
-    	
     }
+    
+
+    close(fd);
+    close(client_fd);
+    close(server_fd);
+    remove(OUTPUT_FILE);
+
+    while (!SLIST_EMPTY(&head))
+    {
+        datap = SLIST_FIRST(&head);
+	SLIST_REMOVE_HEAD(&head, entries);
+	free(datap);
+    }
+    
+    return 0;
 }
 
 
 // get sockaddr, IPv4 or IPv6:
-void *get_in_addr(struct sockaddr *sa)
+void* get_in_addr(struct sockaddr* sa)
 {
     if (sa->sa_family == AF_INET) 
     {
@@ -275,22 +351,242 @@ void *get_in_addr(struct sockaddr *sa)
 }
 
 
-void termination_handler()
+void* send_receive_packet(void* threadp)
 {
-    syslog(LOG_DEBUG, "Caught signal, exiting\n");
+    threadParams_t        *threadParams = (threadParams_t *)threadp;
+    int                   current_in_buf_bytes = 0;   // overwrite content buf
+    int                   received_bytes = 0;
+    char*                 tmp = NULL;
+    int                   content_buf_size = BUFFER_SIZE;
+    bool                  newline_flag = false;
+    char                  buf[BUFFER_SIZE];
+    bool                  rc = true;
     
-    close(fd);
-    close(server_fd);
-    close(client_fd);
-    closelog();
     
-    free(content_buf);
-    free(content_buf2);
-    
-    if(remove(OUTPUT_FILE) < 0)
+ 
+    if(sigprocmask(SIG_BLOCK, &threadParams->mask, NULL) == -1)
     {
-    	syslog(LOG_DEBUG, "Remove %s failed\n", OUTPUT_FILE);
+        printf("failed blocking signal\n");
+    	exit(-1);
+    } 
+
+		
+    if( NULL == (threadParams->read_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE)) )
+    {
+        printf("failed to allocate read buffer\n");
+    	exit(-1);
+    }
+
+    if( NULL == (threadParams->write_buf = (char*)malloc(sizeof(char) * BUFFER_SIZE)) )
+    {
+        printf("failed to allocate write buffer\n");
+    	exit(-1);
+    }
+
+
+	// both read/write buffers are allocated
+    
+    do	// receive a line
+    {
+        received_bytes = recv(threadParams->client_fd, buf, BUFFER_SIZE-1, 0);
+	    
+	if(received_bytes == -1)
+	{
+	    printf("recv failed\n");
+	    rc = false;
+	    break;
+	}
+	
+	buf[received_bytes] = 0;
+	
+	if(strchr(buf, '\n') != NULL)
+	{
+	    newline_flag = true;
+	}
+	    
+	// check if malloced size is enough to hold new appended contents, otherwise realloc
+	if( (received_bytes + current_in_buf_bytes) >= content_buf_size )
+	{
+	    tmp = (char*)realloc_memory((unsigned char*)threadParams->read_buf, content_buf_size, content_buf_size+BUFFER_SIZE);
+            if(tmp == NULL)
+	    {
+	        printf("readBuf realloc failed\n");
+		rc = false;
+		break;
+	    }            
+			
+	    else
+	    {
+	        content_buf_size += BUFFER_SIZE;
+		threadParams->read_buf = tmp;
+	    }
+	}
+	 
+	// append received bytes into read_buf
+	memcpy(threadParams->read_buf+current_in_buf_bytes, buf, received_bytes);    		 
+	current_in_buf_bytes += received_bytes;
+    	 
+    }while(!newline_flag);
+    
+
+    if(sigprocmask(SIG_UNBLOCK, &threadParams->mask, NULL) == -1)
+    {
+        printf("failed unblocking signal\n");
+    } 
+
+    if( rc ) // got a good buf of bytes
+    {
+        pthread_mutex_lock(&locker);
+	ssize_t write_bytes = write(threadParams->fd, threadParams->read_buf, current_in_buf_bytes);    // append to file
+	pthread_mutex_unlock(&locker);
+    
+	//printf("write bytes %ld\n", write_bytes);
+	if(write_bytes != current_in_buf_bytes)
+	{
+	    printf("not completely written\n");
+	}
     }
     
-    exit(0);
+    // Unmask signals after receive/send
+    if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
+    {
+        perror("\nERROR sigprocmask():");
+    }
+
+    if( rc ) // write succeeded
+    {      
+        lseek(threadParams->fd, 0, SEEK_SET);
+    
+	//read one byte at a time and sending one packet with newline at a time
+	char byte_content;
+	int nbytes = 0;
+	int send_buf_size = BUFFER_SIZE;
+	int packet_size = 0;
+    
+	pthread_mutex_lock(&locker);
+	while( (nbytes = read(threadParams->fd, &byte_content,1)) > 0 )
+	{
+	    if(packet_size >= send_buf_size)   // reallocate memory if not enough space
+	    {
+	        tmp = (char*)realloc_memory((unsigned char*)threadParams->write_buf, send_buf_size, send_buf_size+BUFFER_SIZE);
+
+		if(tmp == NULL)
+		{
+		    printf("writeBuf realloc failed\n");
+		    rc = false;
+		    break;
+		}            
+		
+		else
+		{
+		    send_buf_size += BUFFER_SIZE;
+		    threadParams->write_buf = tmp;
+		}
+	    }
+        
+	    threadParams->write_buf[packet_size++] = byte_content;
+	    if(byte_content == '\n')    // read in newline, send the packet
+	    {   
+	        // Block signals to avoid partial send
+		if(sigprocmask(SIG_BLOCK, &(threadParams->mask), NULL) == -1)
+		{
+		    printf("failed blocking signal\n");
+    		    break;
+		}
+		
+		ssize_t send_bytes = send(threadParams->client_fd, threadParams->write_buf, packet_size, 0);
+            
+		if (sigprocmask(SIG_UNBLOCK,&(threadParams->mask),NULL) == -1)
+		{
+		    perror("\nERROR sigprocmask():");
+		    break;
+		}
+            
+		if(send_bytes == -1)
+		{
+		    printf("send() failed\n");
+		    break;
+		}
+            
+	            packet_size = 0;
+	    }
+	}
+    }
+    
+    // single point exit, clean up
+
+    if(threadParams->read_buf)
+    {
+        free(threadParams->read_buf);
+    }
+
+    if(threadParams->write_buf)
+    {
+        free(threadParams->write_buf);
+    }
+    
+    pthread_mutex_unlock(&locker);
+
+    close(threadParams->client_fd);
+
+    threadParams->is_completed = rc;
+    
+    return NULL;
+    //pthread_exit(threadParams);
+}
+
+
+// from timer_thread.c example code in lecture 9
+static void timer_thread(union sigval sigval)
+{
+    timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
+    char buf[BUFFER_SIZE];
+    time_t time_now;
+    struct tm *time_info;
+    time(&time_now);
+    time_info = localtime(&time_now);
+    
+    size_t nbytes = strftime(buf,100,"timestamp:%a, %d %b %Y %T %z\n",time_info);
+    
+    pthread_mutex_lock(&locker);
+    
+    ssize_t write_bytes = write(td->fd, buf, nbytes);
+    
+    pthread_mutex_unlock(&locker);
+    
+    if(write_bytes == -1)
+    {
+        perror("timer_thread write() failed\n");
+        exit(-1);
+    }
+    
+    
+}
+
+
+void sig_handler(int signo)
+{
+    if(signo == SIGINT || signo==SIGTERM) 
+    {
+        shutdown(server_fd, SHUT_RDWR);
+        shut_down_flag = true;
+    }
+}
+
+
+// return null if reallocation failed
+// otherwise return pointer to new allocated memory of new_size
+// old size bytes of the buf is copied into new allocated memory
+// and the old buf is freed
+unsigned char* realloc_memory(const unsigned char* buf, int old_size, int new_size)
+{
+    unsigned char* tmp = (unsigned char*)malloc(new_size);    // allocate new memory
+    
+    if(tmp != NULL)
+    {
+        memcpy(tmp, buf, old_size);
+        free((unsigned char*)buf);
+    }
+    
+    return tmp;
 }
