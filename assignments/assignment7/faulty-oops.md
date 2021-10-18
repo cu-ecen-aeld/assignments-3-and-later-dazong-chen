@@ -46,3 +46,24 @@ Call trace:
 Code: d2800001 d2800000 d503233f d50323bf (b900003f) 
 ---[ end trace 1b8f6e097b7b27e3 ]---
 ```
+
+###Analysis
+```
+Faulty occurs because of NULL pointer dereference at virtual address 0000000000000000
+Call trace:
+ faulty_write+0x10/0x20 [faulty]
+ 
+pc : faulty_write+0x10/0x20 [faulty]
+0000000000000000 <faulty_write>:
+   0:	d2800001 	mov	x1, #0x0                   	// #0
+   4:	d2800000 	mov	x0, #0x0                   	// #0
+   8:	d503233f 	paciasp
+   c:	d50323bf 	autiasp
+  10:	b900003f 	str	wzr, [x1]
+  14:	d65f03c0 	ret
+  18:	d503201f 	nop
+  1c:	d503201f 	nop
+  
+register x1 is set to 0x00 at beginning, then at 0x10, str instruction, which means store a register value into memory.
+The instruciton at 0x10 is trying to store wzr value into x1 address. This results a NULL pointer dereference at virtual address 0000000000000000
+```
