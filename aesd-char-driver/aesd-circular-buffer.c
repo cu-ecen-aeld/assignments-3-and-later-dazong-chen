@@ -73,27 +73,36 @@ struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct
 * Any necessary locking must be handled by the caller
 * Any memory referenced in @param add_entry must be allocated by and/or must have a lifetime managed by the caller.
 */
-void aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
+const char* aesd_circular_buffer_add_entry(struct aesd_circular_buffer *buffer, const struct aesd_buffer_entry *add_entry)
 {
-
-    if(buffer == NULL)
+    const char*		tmp = NULL;
+    
+    if(buffer == NULL || add_entry == NULL)
     {
-        return;
+        return NULL;
+    }
+    
+    if(buffer->full == true)
+    {   
+        tmp = buffer->entry[buffer->in_offs].buffptr;
     }
     
     buffer->entry[buffer->in_offs] = *add_entry;
 
     buffer->in_offs = (buffer->in_offs+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;    // implement in_offs to next location after new entry is written
-        
+    
     if(buffer->full == true)
-    {   
-        buffer->out_offs = (buffer->out_offs+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;    //advances buffer->out_offs to the new start location.
+    {
+        buffer->out_offs = (buffer->out_offs+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
     }
+    
     
     if(buffer->in_offs == buffer->out_offs)    // check the full conditions
     {
         buffer->full = true;
     }
+    
+    return tmp;
 }
 
 /**

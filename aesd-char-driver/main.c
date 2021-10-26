@@ -113,7 +113,10 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 {
 	unsigned long                 	uncopied_bytes = 0;
 	struct aesd_dev*              	dev = filp->private_data;
-	ssize_t			    	retval = 0; 
+	ssize_t			    	retval = -ENOMEM; 
+	char*                            newline = NULL;
+	char*				discard = NULL;
+	
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	/**
 	 * TODO: handle write
@@ -124,16 +127,31 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		return -ERESTARTSYS;
 	}
 	
-	// allocate memory in kernel buffer
-	dev->buffer_entry.buffptr = kmalloc(count*sizeof(char), GFP_KERNEL);
 	
-	if(dev->buffer_entry.buffptr == NULL)
+	if(dev->buffer_entry.size == 0)		// doesn't exist
 	{
-		goto out;
+		// allocate memory in kernel buffer
+		dev->buffer_entry.buffptr = kmalloc(count*sizeof(char), GFP_KERNEL);
+		
+		if(dev->buffer_entry.buffptr == NULL)
+		{
+			goto out;
+		}
 	}
 	
+	else 	// realloc new buffptr that contains old and new data
+	{
+		dev->buffer_entry.buffptr = krealloc(dev->buffer_entry.buffptr, dev->buffer_entry.size+count, GFP_KERNEL);
+		
+		if(dev->buffer_entry.buffptr == NULL)
+		{
+			goto out;
+		}
+	}
+	
+	
 	// copy user-space buffer into kernel buffer
-	uncopied_bytes = copy_from_user((void*)dev->buffer_entry.buffptr, buf, count);    // how many bytes were not copied
+	uncopied_bytes = copy_from_user( (dev->buffer_entry.buffptr+dev->buffer_entry.size), buf, count);    // copy to new data space (+dev->buffer_entry.size) and return how many bytes were not copied
 	
 	if(uncopied_bytes != 0)
 	{
@@ -142,16 +160,25 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	
 	retval = count - uncopied_bytes;
 	
-	dev->buffer_entry.size = retval;        
+	dev->buffer_entry.size += retval;        
 	
 	// Write operations which do not include a \n character should be saved and appended by future write operations.
-	char* newline = memchr(dev->buffer_entry.buffptr, '\n', dev->buffer_entry.size);    // find '\n' character
+	newline = (char*)memchr(dev->buffer_entry.buffptr, '\n', dev->buffer_entry.size);    // find '\n' character
 	
 	if(newline != NULL)
 	{
-		aesd_circular_buffer_add_entry(&dev->cbuff, &dev->buffer_entry);
+		discard = aesd_circular_buffer_add_entry(&dev->cbuff, &dev->buffer_entry);
+		
+		if(discard != NULL)
+		{
+			kfree(discard);
+		}
+		
+		dev->buffer_entry.size = 0;
+		dev->buffer_entry.buffptr = NULL;
 	}
 	
+	*f_pos = 0;
     out:
 	mutex_unlock(&dev->locker);
 	return retval;
@@ -200,7 +227,9 @@ int aesd_init_module(void)
 	 */
 	
 	mutex_init(&aesd_device.locker);
-
+	
+	aesd_circular_buffer_init(&aesd_device.cbuff);
+	
 	result = aesd_setup_cdev(&aesd_device);
 
 	if( result )
