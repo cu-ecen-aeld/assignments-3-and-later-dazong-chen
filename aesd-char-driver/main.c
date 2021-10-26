@@ -17,6 +17,10 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
+#include <linux/mutex.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include "aesd-circular-buffer.h"
 #include "aesdchar.h"
 
 
@@ -34,7 +38,7 @@ int aesd_open(struct inode *inode, struct file *filp)
 	/**
 	 * TODO: handle open
 	 */
-	struct aesd_dev* dev;
+	struct aesd_dev* 	dev;
 	
 	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);    // find addr of aesd_dev structure and return to pointer
 	filp->private_data = dev;    // stores the pointer in private data;
@@ -51,14 +55,14 @@ int aesd_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
-                loff_t *f_pos)
+ssize_t aesd_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 {
 	ssize_t                       retval = 0;
-	size_t                        bytes_left = count;
+	size_t                        bytes_to_read = 0;
 	struct aesd_dev*              dev = filp->private_data;
 	struct aesd_buffer_entry*     entry = NULL;
-	                       
+	size_t                        entry_offset = 0;                       
+	unsigned long                 uncopied_bytes = 0;
 	
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
 	
@@ -70,20 +74,46 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 		return -ERESTARTSYS;
 	}
 	
+	entry = aesd_circular_buffer_find_entry_offset_for_fpos(&dev->cbuff, *f_pos, &entry_offset);
 	
+	if(entry == NULL)
+	{
+		retval = 0;
+		goto out;
+		
+	}
 	
+	bytes_to_read = entry->size - entry_offset;	// bytes need to be read in the rest of entry
 	
+	if(bytes_to_read > count)
+	{
+		bytes_to_read = count;
+	}
 	
-	return retval;
+	uncopied_bytes = copy_to_user(buf, (entry->buffptr+entry_offset), bytes_to_read);
+	
+	if(uncopied_bytes != 0)
+	{
+		PDEBUG("%lu bytes were not copied to user", uncopied_bytes);
+		retval = -EFAULT;
+		goto out;
+	}
+	
+	*f_pos += bytes_to_read;	// update f_pos position
+	retval = bytes_to_read;
+	
+    out:
+    	mutex_unlock(&dev->locker);
+    	return retval;
 }
+
 
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t                       retval = -ENOMEM;
-	unsigned long                 uncopied_bytes = 0;
-	struct aesd_dev*              dev = filp->private_data;
-	
+	unsigned long                 	uncopied_bytes = 0;
+	struct aesd_dev*              	dev = filp->private_data;
+	ssize_t			    	retval = 0; 
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	/**
 	 * TODO: handle write
@@ -95,9 +125,9 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 	}
 	
 	// allocate memory in kernel buffer
-	dev->buffer_entry.buffptr = kmalloc(count, GFP_KERNEL);
+	dev->buffer_entry.buffptr = kmalloc(count*sizeof(char), GFP_KERNEL);
 	
-	if(dev->entry.buffptr == NULL)
+	if(dev->buffer_entry.buffptr == NULL)
 	{
 		goto out;
 	}
@@ -136,6 +166,7 @@ struct file_operations aesd_fops = {
 	.release =  aesd_release,
 };
 
+
 static int aesd_setup_cdev(struct aesd_dev *dev)
 {
 	int err, devno = MKDEV(aesd_major, aesd_minor);
@@ -149,7 +180,6 @@ static int aesd_setup_cdev(struct aesd_dev *dev)
 	}
 	return err;
 }
-
 
 
 int aesd_init_module(void)
@@ -168,15 +198,20 @@ int aesd_init_module(void)
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 */
-        mutex_init(&aesd_device.locker);
+	
+	mutex_init(&aesd_device.locker);
+
 	result = aesd_setup_cdev(&aesd_device);
 
-	if( result ) {
+	if( result )
+	{
 		unregister_chrdev_region(dev, 1);
 	}
+	
 	return result;
 
 }
+
 
 void aesd_cleanup_module(void)
 {
@@ -187,9 +222,11 @@ void aesd_cleanup_module(void)
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
+	
+	aesd_circular_buffer_free(&aesd_device.cbuff);
+	
 	unregister_chrdev_region(devno, 1);
 }
-
 
 
 module_init(aesd_init_module);
