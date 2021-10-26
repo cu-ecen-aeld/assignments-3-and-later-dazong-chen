@@ -18,6 +18,8 @@
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
 #include "aesdchar.h"
+
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -32,7 +34,10 @@ int aesd_open(struct inode *inode, struct file *filp)
 	/**
 	 * TODO: handle open
 	 */
-	 
+	struct aesd_dev* dev;
+	
+	dev = container_of(inode->i_cdev, struct aesd_dev, cdev);    // find addr of aesd_dev structure and return to pointer
+	filp->private_data = dev;    // stores the pointer in private data;
 	 
 	return 0;
 }
@@ -49,24 +54,80 @@ int aesd_release(struct inode *inode, struct file *filp)
 ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t retval = 0;
+	ssize_t                       retval = 0;
+	size_t                        bytes_left = count;
+	struct aesd_dev*              dev = filp->private_data;
+	struct aesd_buffer_entry*     entry = NULL;
+	                       
+	
 	PDEBUG("read %zu bytes with offset %lld",count,*f_pos);
+	
 	/**
 	 * TODO: handle read
 	 */
+	if(mutex_lock_interruptible(&dev->locker))
+	{
+		return -ERESTARTSYS;
+	}
+	
+	
+	
+	
+	
 	return retval;
 }
 
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
                 loff_t *f_pos)
 {
-	ssize_t retval = -ENOMEM;
+	ssize_t                       retval = -ENOMEM;
+	unsigned long                 uncopied_bytes = 0;
+	struct aesd_dev*              dev = filp->private_data;
+	
 	PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 	/**
 	 * TODO: handle write
 	 */
+	 
+	if(mutex_lock_interruptible(&dev->locker))
+	{
+		return -ERESTARTSYS;
+	}
+	
+	// allocate memory in kernel buffer
+	dev->buffer_entry.buffptr = kmalloc(count, GFP_KERNEL);
+	
+	if(dev->entry.buffptr == NULL)
+	{
+		goto out;
+	}
+	
+	// copy user-space buffer into kernel buffer
+	uncopied_bytes = copy_from_user((void*)dev->buffer_entry.buffptr, buf, count);    // how many bytes were not copied
+	
+	if(uncopied_bytes != 0)
+	{
+		PDEBUG("%lu bytes were not copied from user", uncopied_bytes);
+	}
+	
+	retval = count - uncopied_bytes;
+	
+	dev->buffer_entry.size = retval;        
+	
+	// Write operations which do not include a \n character should be saved and appended by future write operations.
+	char* newline = memchr(dev->buffer_entry.buffptr, '\n', dev->buffer_entry.size);    // find '\n' character
+	
+	if(newline != NULL)
+	{
+		aesd_circular_buffer_add_entry(&dev->cbuff, &dev->buffer_entry);
+	}
+	
+    out:
+	mutex_unlock(&dev->locker);
 	return retval;
 }
+
+
 struct file_operations aesd_fops = {
 	.owner =    THIS_MODULE,
 	.read =     aesd_read,
@@ -107,7 +168,7 @@ int aesd_init_module(void)
 	/**
 	 * TODO: initialize the AESD specific portion of the device
 	 */
-
+        mutex_init(&aesd_device.locker);
 	result = aesd_setup_cdev(&aesd_device);
 
 	if( result ) {
@@ -126,7 +187,6 @@ void aesd_cleanup_module(void)
 	/**
 	 * TODO: cleanup AESD specific poritions here as necessary
 	 */
-
 	unregister_chrdev_region(devno, 1);
 }
 
