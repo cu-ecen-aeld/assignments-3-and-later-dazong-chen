@@ -189,11 +189,12 @@ int main(int argc, char *argv[])
     printf("here 4\n");
     
     // create output file
-    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
+    fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_TRUNC, 0644);
     
+    //printf("fd = %d\n",fd);
     if(fd < 0)
     {
-        syslog(LOG_ERR, "open() failed\n");
+        perror("open() failed\n");
         return -1;
     }
     
