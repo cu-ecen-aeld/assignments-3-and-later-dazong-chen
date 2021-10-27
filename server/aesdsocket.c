@@ -29,10 +29,20 @@
 #include <pthread.h>
 #include <time.h>
 
+#define USE_AESD_CHAR_DEVICE 1
+
+
+#if USE_AESD_CHAR_DEVICE
+#define       OUTPUT_FILE            "/dev/aesdchar"
+
+#else
+#define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
+
+#endif
 
 
 #define       PORT                   9000       // the port users will be connecting to
-#define       OUTPUT_FILE            "/var/tmp/aesdsocketdata"
+
 #define       MAX_CONNECTION         10         // number of connections to which the queue of pending connections for sockfd may grow.
 #define       BUFFER_SIZE            500
 
@@ -106,7 +116,7 @@ int main(int argc, char *argv[])
     char           buf[BUFFER_SIZE];
 
     memset(buf, 0, sizeof(buf));
-    
+    printf("%s\n", OUTPUT_FILE);
     slist_data_t *datap = NULL;
     
 
@@ -127,7 +137,7 @@ int main(int argc, char *argv[])
     sigemptyset(&mask);
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGTERM);
-    
+
     if(argc == 2)
     {
         if(strcmp(argv[1], "-d") == 0)
@@ -152,7 +162,7 @@ int main(int argc, char *argv[])
         perror("setsockopt failed");
        	exit(-1);
     }
-    
+
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(PORT);
     server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -176,6 +186,8 @@ int main(int argc, char *argv[])
     	return -1;
     }
     
+    printf("here 4\n");
+    
     // create output file
     fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
     
@@ -184,6 +196,8 @@ int main(int argc, char *argv[])
         syslog(LOG_ERR, "open() failed\n");
         return -1;
     }
+    
+    printf("here 1\n");
     
     if(daemon_flag == true)
     {
@@ -227,10 +241,9 @@ int main(int argc, char *argv[])
     
     timer_data_t       td;
     td.fd = fd;
-    /**
-    * Setup a call to timer_thread passing in the td structure as the sigev_value
-    * argument
-    */
+    
+    //Setup a call to timer_thread passing in the td structure as the sigev_value argument
+
     sev.sigev_notify = SIGEV_THREAD;
     sev.sigev_value.sival_ptr = &td;
     sev.sigev_notify_function = timer_thread;
@@ -244,15 +257,15 @@ int main(int argc, char *argv[])
         printf("Error %d (%s) creating timer!\n",errno,strerror(errno));
     }
     
-    printf("timer_create\n");
+    //printf("timer_create\n");
     
-    start_time.tv_sec += 10;
+    //start_time.tv_sec += 10;
     
     if ( clock_gettime(clock_id, &start_time) != 0 ) 
     {
         printf("Error %d (%s) getting clock %d time\n", errno, strerror(errno), clock_id);
     }
-    printf("clock_gettime\n");
+    //printf("clock_gettime\n");
     
     
     struct itimerspec itimerspec;
@@ -266,11 +279,12 @@ int main(int argc, char *argv[])
         printf("Error %d (%s) setting timer\n",errno,strerror(errno));
     }
     
-    printf("timer_settime\n");
+    //printf("timer_settime\n");
+    close(fd);
     
     addr_size = sizeof(struct sockaddr);
     memset(&client_addr, 0, addr_size);
-    
+    printf("here 2\n");
     while(!shut_down_flag)
     {
         
@@ -295,13 +309,13 @@ int main(int argc, char *argv[])
     	    char client_ip6[INET6_ADDRSTRLEN]; // space to hold the IPv6 string
     	    inet_ntop(AF_INET, get_in_addr((struct sockaddr*)&client_addr), client_ip6, sizeof client_ip6);
     	    syslog(LOG_DEBUG, "Accepted connection from %s", client_ip6);
-    	    printf("Accepted connection from %s\n", client_ip6);
+    	    //printf("Accepted connection from %s\n", client_ip6);
     	    
     	    // create new thread
     	    datap = malloc(sizeof(slist_data_t));
     	    datap->threadParams.thread_id = thread_id;
     	    datap->threadParams.client_fd = client_fd;
-    	    datap->threadParams.fd = fd;
+    	    //datap->threadParams.fd = fd;
     	    datap->threadParams.mask = mask;
     	    datap->threadParams.is_completed = false;
     	    
@@ -383,7 +397,7 @@ void* send_receive_packet(void* threadp)
     	exit(-1);
     }
 
-
+    threadParams->fd = open(OUTPUT_FILE, O_RDWR | O_CREAT | O_APPEND, 0644);
 	// both read/write buffers are allocated
     
     do	// receive a line
@@ -528,7 +542,9 @@ void* send_receive_packet(void* threadp)
     pthread_mutex_unlock(&locker);
 
     close(threadParams->client_fd);
-
+    
+    close(threadParams->fd);
+    
     threadParams->is_completed = rc;
     
     return NULL;
@@ -539,6 +555,9 @@ void* send_receive_packet(void* threadp)
 // from timer_thread.c example code in lecture 9
 static void timer_thread(union sigval sigval)
 {
+#if USE_AESD_CHAR_DEVICE
+
+#else
     timer_data_t* td = (timer_data_t*) sigval.sival_ptr;
     char buf[BUFFER_SIZE];
     time_t time_now;
@@ -559,7 +578,7 @@ static void timer_thread(union sigval sigval)
         perror("timer_thread write() failed\n");
         exit(-1);
     }
-    
+#endif  
     
 }
 
